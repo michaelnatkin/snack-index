@@ -10,6 +10,8 @@ import { AdminHome } from '@/components/admin/AdminHome';
 import { PlaceEditor } from '@/components/admin/PlaceEditor';
 import { DishEditor } from '@/components/admin/DishEditor';
 import { HomeScreen } from '@/components/home/HomeScreen';
+import { PlaceDetail } from '@/components/place/PlaceDetail';
+import { MySnacksScreen } from '@/components/mysnacks/MySnacksScreen';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 // Admin Guard component
@@ -29,28 +31,6 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
-}
-
-// Placeholder My Snacks screen
-function MySnacksScreen() {
-  return (
-    <AppLayout>
-      <div className="flex flex-col items-center justify-center min-h-[80vh] px-6">
-        <div className="text-center">
-          <span className="text-6xl mb-4 block">♥</span>
-          <h1 className="text-2xl font-bold text-charcoal mb-2 font-display">
-            My Snacks
-          </h1>
-          <p className="text-text-muted">
-            Your saved and visited spots will appear here
-          </p>
-          <p className="text-sm text-sage mt-4">
-            (Coming in Phase 5)
-          </p>
-        </div>
-      </div>
-    </AppLayout>
-  );
 }
 
 // Placeholder Settings screen
@@ -161,6 +141,14 @@ function AppRoutes() {
         element={
           <AuthGuard>
             <MySnacksScreen />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/place/:placeId"
+        element={
+          <AuthGuard>
+            <PlaceDetail />
           </AuthGuard>
         }
       />
