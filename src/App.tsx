@@ -12,6 +12,7 @@ import { HomeScreen } from '@/components/home/HomeScreen';
 import { PlaceDetail } from '@/components/place/PlaceDetail';
 import { MySnacksScreen } from '@/components/mysnacks/MySnacksScreen';
 import { SettingsScreen } from '@/components/settings/SettingsScreen';
+import { ShareLanding } from '@/components/share/ShareLanding';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 // Admin Guard component
@@ -102,6 +103,16 @@ function AppRoutes() {
             <PlaceDetail />
           </AuthGuard>
         }
+      />
+
+      {/* Share routes - accessible without auth */}
+      <Route
+        path="/s/:placeId"
+        element={<ShareLanding />}
+      />
+      <Route
+        path="/s/:placeId/dish/:dishId"
+        element={<ShareLanding />}
       />
       <Route
         path="/settings"
