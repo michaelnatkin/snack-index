@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserStore } from '@/stores/userStore';
 import { WelcomeScreen } from '@/components/auth/WelcomeScreen';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { PermissionsScreen } from '@/components/onboarding/PermissionsScreen';
-import { DietarySheet } from '@/components/onboarding/DietarySheet';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AdminHome } from '@/components/admin/AdminHome';
 import { PlaceEditor } from '@/components/admin/PlaceEditor';
 import { DishEditor } from '@/components/admin/DishEditor';
+import { HomeScreen } from '@/components/home/HomeScreen';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 // Admin Guard component
@@ -29,47 +29,6 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
-}
-
-// Placeholder Home screen
-function HomeScreen() {
-  const { user } = useUserStore();
-  const [showDietarySheet, setShowDietarySheet] = useState(false);
-
-  // Show dietary sheet on first load
-  useEffect(() => {
-    if (user && !user.onboarding.hasSeenDietarySheet) {
-      const timer = setTimeout(() => {
-        setShowDietarySheet(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [user]);
-
-  return (
-    <AppLayout>
-      <div className="flex flex-col items-center justify-center min-h-[80vh] px-6">
-        <div className="text-center">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-honey to-paprika flex items-center justify-center shadow-lg mx-auto mb-6">
-            <span className="text-4xl">🍿</span>
-          </div>
-          <h1 className="text-3xl font-bold text-charcoal mb-2 font-display">
-            Hello, {user?.displayName || 'Snacker'}!
-          </h1>
-          <p className="text-text-muted mb-4">
-            Finding snacks near you...
-          </p>
-          <p className="text-sm text-sage">
-            (Home screen coming in Phase 4)
-          </p>
-        </div>
-      </div>
-
-      {showDietarySheet && (
-        <DietarySheet onDismiss={() => setShowDietarySheet(false)} />
-      )}
-    </AppLayout>
-  );
 }
 
 // Placeholder My Snacks screen
