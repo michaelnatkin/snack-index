@@ -88,10 +88,10 @@ export function PermissionsScreen() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-background">
-      <div className="max-w-sm w-full text-center">
+    <div className="min-h-screen flex flex-col justify-center px-6 bg-background">
+      <div className="max-w-[28rem] w-full mx-auto text-center">
         {/* Header */}
-        <h1 className="text-2xl font-bold text-charcoal mb-2 font-display">
+        <h1 className="text-2xl font-bold text-charcoal mb-2 font-display leading-tight">
           To find snacks near you, we need a couple things...
         </h1>
 

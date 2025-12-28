@@ -26,7 +26,7 @@ export function NothingOpenState({ nextToOpen }: NothingOpenStateProps) {
       </h2>
 
       {nextToOpen ? (
-        <div className="mt-6 bg-surface rounded-xl p-5 shadow-sm border border-butter/30 max-w-xs w-full">
+        <div className="mt-6 bg-surface rounded-xl p-5 shadow-sm border border-butter/30 max-w-[20rem] w-full">
           <p className="text-sm text-text-muted mb-1">Next to open:</p>
           <h3 className="text-lg font-semibold text-charcoal mb-1">
             {nextToOpen.place.name}

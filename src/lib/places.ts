@@ -100,7 +100,8 @@ export async function deletePlace(placeId: string): Promise<void> {
  */
 export async function getDishesForPlace(placeId: string): Promise<Dish[]> {
   const dishesRef = collection(db, 'dishes');
-  const q = query(dishesRef, where('placeId', '==', placeId), orderBy('name'));
+  // Avoid composite index requirement for local/dev by skipping orderBy
+  const q = query(dishesRef, where('placeId', '==', placeId));
   const snapshot = await getDocs(q);
   
   return snapshot.docs.map((doc) => ({

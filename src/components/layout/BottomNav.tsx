@@ -30,7 +30,7 @@ function NavItem({ to, icon, activeIcon, label }: NavItemProps) {
 export function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-butter/30 z-30">
-      <div className="max-w-lg mx-auto flex items-center justify-around">
+      <div className="max-w-[32rem] mx-auto flex items-center justify-around">
         <NavItem
           to="/home"
           icon={<span>○</span>}

@@ -144,7 +144,7 @@ export function PlaceDetail() {
     <AppLayout hideNav>
       {/* Header */}
       <header className="bg-surface border-b border-butter/30 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
+        <div className="max-w-[42rem] mx-auto flex items-center justify-between">
           <button
             onClick={() => navigate(-1)}
             className="text-2xl"
@@ -163,7 +163,7 @@ export function PlaceDetail() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-[42rem] mx-auto">
         {/* Hero Image */}
         <div className="h-48 bg-gradient-to-br from-honey via-paprika to-eggplant flex items-center justify-center">
           {place.imageURL ? (

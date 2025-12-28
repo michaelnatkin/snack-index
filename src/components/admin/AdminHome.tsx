@@ -51,7 +51,7 @@ export function AdminHome() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="bg-surface border-b border-butter/30 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
+        <div className="max-w-[42rem] mx-auto flex items-center justify-between">
           <button
             onClick={() => navigate('/settings')}
             className="text-2xl"
@@ -64,7 +64,7 @@ export function AdminHome() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="max-w-[42rem] mx-auto px-4 py-6">
         {/* Add Place Button */}
         <Button
           size="lg"

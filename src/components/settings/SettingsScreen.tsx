@@ -80,7 +80,7 @@ export function SettingsScreen() {
 
   return (
     <AppLayout>
-      <div className="px-6 py-6 max-w-lg mx-auto">
+      <div className="px-6 py-6 max-w-[32rem] mx-auto">
         <h1 className="text-2xl font-bold text-charcoal mb-6 font-display">
           Settings
         </h1>

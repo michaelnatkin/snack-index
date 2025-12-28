@@ -44,6 +44,7 @@ export function ShareLanding() {
 
       if (!placeData) {
         setError('Place not found');
+        setLoading(false);
         return;
       }
 
@@ -128,7 +129,7 @@ export function ShareLanding() {
         </div>
       </div>
 
-      <div className="px-6 py-6 max-w-lg mx-auto">
+      <div className="px-6 py-6 max-w-[32rem] mx-auto">
         {/* Place Info */}
         <h1 className="text-3xl font-bold text-charcoal font-display mb-2">
           {place.name}

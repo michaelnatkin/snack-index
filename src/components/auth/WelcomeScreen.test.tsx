@@ -35,7 +35,7 @@ describe('WelcomeScreen', () => {
 
   it('renders the tagline', () => {
     renderWithRouter(<WelcomeScreen />);
-    expect(screen.getByText('Find your next snack')).toBeInTheDocument();
+    expect(screen.getByText('Discover snacks near you')).toBeInTheDocument();
   });
 
   it('renders Google sign-in button', () => {

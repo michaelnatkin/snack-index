@@ -53,7 +53,7 @@ export function CelebrationModal({ visitCount, onDismiss }: CelebrationModalProp
         </div>
 
         {/* Card */}
-        <div className="bg-surface rounded-2xl shadow-xl p-8 text-center animate-bounce-in pointer-events-auto max-w-xs mx-4">
+        <div className="bg-surface rounded-2xl shadow-xl p-8 text-center animate-bounce-in pointer-events-auto max-w-[20rem] mx-4">
           <span className="text-6xl block mb-4">🎉</span>
           <h2 className="text-2xl font-bold text-charcoal font-display mb-2">
             Nice!

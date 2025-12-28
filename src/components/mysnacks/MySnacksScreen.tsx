@@ -150,7 +150,7 @@ export function MySnacksScreen() {
 
   return (
     <AppLayout>
-      <div className="px-6 py-6 max-w-lg mx-auto">
+      <div className="px-6 py-6 max-w-[32rem] mx-auto">
         <h1 className="text-2xl font-bold text-charcoal mb-2 font-display">
           My Snacks
         </h1>
@@ -255,7 +255,7 @@ export function MySnacksScreen() {
 
         {/* Undo toast */}
         {undoItem && (
-          <div className="fixed bottom-24 left-4 right-4 max-w-lg mx-auto bg-charcoal text-cream rounded-lg p-4 flex items-center justify-between shadow-lg z-40">
+          <div className="fixed bottom-24 left-4 right-4 max-w-[32rem] mx-auto bg-charcoal text-cream rounded-lg p-4 flex items-center justify-between shadow-lg z-40">
             <span>Removed {undoItem.place.name}</span>
             <button
               onClick={handleUndo}

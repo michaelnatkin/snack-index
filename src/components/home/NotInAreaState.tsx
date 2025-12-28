@@ -65,12 +65,12 @@ export function NotInAreaState({ previewPlaces = [], userLocation }: NotInAreaSt
 
       {/* Waitlist form */}
       {submitted ? (
-        <div className="bg-success/10 text-success rounded-lg p-4 max-w-xs">
+        <div className="bg-success/10 text-success rounded-lg p-4 max-w-[20rem]">
           <p className="font-medium">You&apos;re on the list!</p>
           <p className="text-sm">We&apos;ll let you know when we expand.</p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-3">
+        <form onSubmit={handleSubmit} className="w-full max-w-[20rem] space-y-3">
           <input
             type="email"
             placeholder="Enter your email..."

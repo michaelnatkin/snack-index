@@ -18,7 +18,7 @@ export function DismissModal({ placeName, onNeverShow, onNotToday, onCancel }: D
 
       {/* Modal */}
       <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up">
-        <div className="bg-surface rounded-t-2xl shadow-lg max-w-lg mx-auto">
+        <div className="bg-surface rounded-t-2xl shadow-lg max-w-[32rem] mx-auto">
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-2">
             <div className="w-10 h-1 bg-sage/30 rounded-full" />

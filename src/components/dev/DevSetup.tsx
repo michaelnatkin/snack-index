@@ -31,7 +31,7 @@ export function DevSetup() {
 
   return (
     <div className="min-h-screen bg-cream-50 flex flex-col items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
+      <div className="bg-white rounded-2xl shadow-lg p-8 max-w-[28rem] w-full text-center">
         <h1 className="text-2xl font-display font-bold text-warm-900 mb-4">
           🛠️ Dev Setup
         </h1>
