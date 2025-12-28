@@ -135,7 +135,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | n
 /**
  * Check if a place is currently open
  */
-export async function getPlaceHours(placeId: string): Promise<PlaceHours> {
+export async function getPlaceHours(placeId: string, currentTimeOverride?: Date): Promise<PlaceHours> {
   // Check cache first
   const cached = hoursCache.get(placeId);
   if (cached && Date.now() - cached.timestamp < HOURS_CACHE_TTL) {
@@ -166,21 +166,65 @@ export async function getPlaceHours(placeId: string): Promise<PlaceHours> {
     const place = await res.json();
     const hoursData = place.currentOpeningHours;
 
+    type ParsedPeriod = { open: { day: number; time: string }; close?: { day: number; time: string } };
+    const periods: ParsedPeriod[] =
+      hoursData?.periods?.map((p: any) => ({
+        open: {
+          day: p.open?.day ?? 0,
+          time: p.open?.hourMinute ?? (p.open?.hour !== undefined && p.open?.minute !== undefined
+            ? `${String(p.open.hour).padStart(2, '0')}${String(p.open.minute).padStart(2, '0')}`
+            : '0000'),
+        },
+        close: p.close
+          ? {
+              day: p.close.day ?? 0,
+              time:
+                p.close.hourMinute ??
+                (p.close.hour !== undefined && p.close.minute !== undefined
+                  ? `${String(p.close.hour).padStart(2, '0')}${String(p.close.minute).padStart(2, '0')}`
+                  : '0000'),
+            }
+          : undefined,
+      })) || [];
+
     const hours: PlaceHours = {
       isOpen: hoursData?.openNow ?? true,
-      periods: hoursData?.periods?.map((p: any) => ({
-        open: { day: p.open?.day ?? 0, time: p.open?.hourMinute ?? '0000' },
-        close: p.close ? { day: p.close.day ?? 0, time: p.close.hourMinute ?? '0000' } : undefined,
-      })),
+      periods,
     };
 
-    if (hours.isOpen && hours.periods) {
+    // Recompute isOpen if admin provided a fake "now"
+    if (currentTimeOverride && periods.length > 0) {
+      const now = currentTimeOverride;
+      const day = now.getDay();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      const todayPeriod = periods.find((p: ParsedPeriod) => p.open.day === day);
+      if (todayPeriod?.open?.time) {
+        const openTime = todayPeriod.open.time;
+        const closeTime = todayPeriod.close?.time;
+        const openInt = parseInt(openTime, 10);
+        const closeInt = closeTime ? parseInt(closeTime, 10) : undefined;
+
+        if (closeInt !== undefined) {
+          // Handle overnight by allowing close day to differ
+          if (todayPeriod.close?.day !== day && closeInt < openInt) {
+            hours.isOpen = parseInt(hhmm, 10) >= openInt || parseInt(hhmm, 10) < closeInt;
+          } else {
+            hours.isOpen = parseInt(hhmm, 10) >= openInt && parseInt(hhmm, 10) < closeInt;
+          }
+        } else {
+          hours.isOpen = parseInt(hhmm, 10) >= openInt;
+        }
+
+        if (closeTime) {
+          hours.closeTime = `${closeTime.slice(0, 2)}:${closeTime.slice(2)}`;
+        }
+      }
+    } else if (hours.isOpen && periods.length > 0) {
       const now = new Date();
       const day = now.getDay();
-      const todayPeriod = hours.periods.find((p) => p.open.day === day);
-      if (todayPeriod?.close) {
-        const closeTime = todayPeriod.close.time;
-        hours.closeTime = `${closeTime.slice(0, 2)}:${closeTime.slice(2)}`;
+      const todayPeriod = periods.find((p: ParsedPeriod) => p.open.day === day);
+      if (todayPeriod?.close?.time) {
+        hours.closeTime = `${todayPeriod.close.time.slice(0, 2)}:${todayPeriod.close.time.slice(2)}`;
       }
     }
 
@@ -256,8 +300,14 @@ function getMockPlaceDetails(placeId: string): PlaceDetails | null {
 function getMockPlaceHours(): PlaceHours {
   // Randomly return open or closed for testing
   return {
-    isOpen: Math.random() > 0.3,
+    isOpen: true,
     closeTime: '21:00',
+    periods: [
+      {
+        open: { day: 1, time: '0800' },
+        close: { day: 1, time: '2100' },
+      },
+    ],
   };
 }
 

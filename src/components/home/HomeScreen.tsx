@@ -10,10 +10,12 @@ import { NotInAreaState } from './NotInAreaState';
 import { useUserStore } from '@/stores/userStore';
 import { requestLocation } from '@/lib/location';
 import { getRecommendationQueue, type PlaceRecommendation } from '@/lib/recommendations';
+import { useTestingStore } from '@/stores/testingStore';
 
 export function HomeScreen() {
   const navigate = useNavigate();
   const { user, updateOnboarding } = useUserStore();
+  const { overrideLocation, overrideTimeIso } = useTestingStore();
 
   // UI State
   const [loading, setLoading] = useState(true);
@@ -32,8 +34,10 @@ export function HomeScreen() {
     const loadData = async () => {
       setLoading(true);
       
-      // Get current location
-      const locationResult = await requestLocation();
+      // Get current location (allow admin override)
+      const locationResult = overrideLocation
+        ? { success: true, coordinates: overrideLocation }
+        : await requestLocation();
       if (!locationResult.success || !locationResult.coordinates) {
         setResultType('not_in_area');
         setLoading(false);
@@ -41,6 +45,7 @@ export function HomeScreen() {
       }
 
       const { latitude, longitude } = locationResult.coordinates;
+      const nowOverride = overrideTimeIso ? new Date(overrideTimeIso) : undefined;
       const dietaryFilters = user?.preferences.dietaryFilters || {
         vegetarian: false,
         vegan: false,
@@ -51,7 +56,9 @@ export function HomeScreen() {
         const recs = await getRecommendationQueue(
           { latitude, longitude },
           dietaryFilters,
-          user?.id || ''
+          user?.id || '',
+          10,
+          nowOverride
         );
 
         // Minimum delay for anticipation
@@ -73,7 +80,7 @@ export function HomeScreen() {
 
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [overrideLocation, overrideTimeIso]);
 
   // Show dietary sheet on first load
   useEffect(() => {

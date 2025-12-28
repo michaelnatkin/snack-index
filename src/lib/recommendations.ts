@@ -28,7 +28,8 @@ export async function getNearestOpenPlace(
   userLocation: Coordinates,
   dietaryFilters: DietaryFilters,
   userId: string,
-  maxDistanceMiles: number = 5
+  maxDistanceMiles: number = 5,
+  currentTimeOverride?: Date
 ): Promise<RecommendationResult> {
   // Check if user is in Seattle area
   if (!isInSeattleArea(userLocation)) {
@@ -89,7 +90,7 @@ export async function getNearestOpenPlace(
     let isOpen = true;
     let closeTime: string | undefined;
     try {
-      const hours = await getPlaceHours(place.googlePlaceId);
+      const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
       isOpen = hours.isOpen;
       closeTime = hours.closeTime;
     } catch (err) {
@@ -154,7 +155,8 @@ export async function getRecommendationQueue(
   userLocation: Coordinates,
   dietaryFilters: DietaryFilters,
   userId: string,
-  limit: number = 10
+  limit: number = 10,
+  currentTimeOverride?: Date
 ): Promise<PlaceRecommendation[]> {
   if (!isInSeattleArea(userLocation)) {
     return [];
@@ -183,7 +185,7 @@ export async function getRecommendationQueue(
     let isOpen = true;
     let closeTime: string | undefined;
     try {
-      const hours = await getPlaceHours(place.googlePlaceId);
+      const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
       isOpen = hours.isOpen;
       closeTime = hours.closeTime;
     } catch {

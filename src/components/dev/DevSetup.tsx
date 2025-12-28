@@ -2,9 +2,26 @@ import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { seedDatabase } from '../../lib/seed';
 import { Button } from '../ui/Button';
+import { useTestingStore } from '@/stores/testingStore';
 
 export function DevSetup() {
   const { user } = useAuth();
+  const {
+    overrideLocation,
+    overrideTimeIso,
+    setOverrideLocation,
+    setOverrideTimeIso,
+    clearOverrides,
+  } = useTestingStore();
+
+  const [tempLat, setTempLat] = useState(overrideLocation?.latitude?.toString() || '');
+  const [tempLng, setTempLng] = useState(overrideLocation?.longitude?.toString() || '');
+  const [tempLabel, setTempLabel] = useState(overrideLocation?.label || '');
+  const [tempTime, setTempTime] = useState(() => {
+    if (!overrideTimeIso) return '';
+    const d = new Date(overrideTimeIso);
+    return d.toISOString().slice(0, 16); // yyyy-MM-ddTHH:mm for datetime-local
+  });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
@@ -72,6 +89,138 @@ export function DevSetup() {
             Go to App →
           </Button>
         )}
+
+        <div className="mt-10 text-left">
+          <h2 className="text-lg font-display font-bold text-warm-900 mb-2">
+            🧪 Testing overrides (local only)
+          </h2>
+          <p className="text-sm text-warm-600 mb-4">
+            Set a fake location and time for admin testing. Stored in localStorage only (not saved to Firestore).
+          </p>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-warm-900 mb-1">Latitude</label>
+                <input
+                  type="number"
+                  value={tempLat}
+                  onChange={(e) => setTempLat(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="47.6"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-warm-900 mb-1">Longitude</label>
+                <input
+                  type="number"
+                  value={tempLng}
+                  onChange={(e) => setTempLng(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="-122.3"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-warm-900 mb-1">Label (optional)</label>
+              <input
+                type="text"
+                value={tempLabel}
+                onChange={(e) => setTempLabel(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="e.g., Temple Pastries"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-warm-900 mb-1">Fake current time</label>
+              <input
+                type="datetime-local"
+                value={tempTime}
+                onChange={(e) => setTempTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const lat = parseFloat(tempLat);
+                  const lng = parseFloat(tempLng);
+                  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                    setOverrideLocation({
+                      latitude: lat,
+                      longitude: lng,
+                      label: tempLabel || undefined,
+                    });
+                  } else {
+                    alert('Enter a valid latitude and longitude');
+                  }
+                }}
+              >
+                Apply location
+              </Button>
+
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  if (!tempTime) {
+                    setOverrideTimeIso(undefined);
+                    return;
+                  }
+                  const asDate = new Date(tempTime);
+                  if (isNaN(asDate.getTime())) {
+                    alert('Enter a valid datetime');
+                    return;
+                  }
+                  setOverrideTimeIso(asDate.toISOString());
+                }}
+              >
+                Apply time
+              </Button>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setTempLat('');
+                  setTempLng('');
+                  setTempLabel('');
+                  setTempTime('');
+                  clearOverrides();
+                }}
+              >
+                Clear overrides
+              </Button>
+
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setTempLat('47.5993');
+                  setTempLng('-122.3031');
+                  setTempLabel('Temple Pastries');
+                  setOverrideLocation({
+                    latitude: 47.5993,
+                    longitude: -122.3031,
+                    label: 'Temple Pastries',
+                  });
+                }}
+              >
+                Use Temple Pastries (Seattle)
+              </Button>
+            </div>
+
+            <div className="text-sm text-warm-600">
+              <p>Current override location: {overrideLocation ? `${overrideLocation.latitude}, ${overrideLocation.longitude} ${overrideLocation.label ? `(${overrideLocation.label})` : ''}` : 'none'}</p>
+              <p>Current override time: {overrideTimeIso ? new Date(overrideTimeIso).toLocaleString() : 'none'}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
