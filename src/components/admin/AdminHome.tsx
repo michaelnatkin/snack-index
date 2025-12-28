@@ -60,7 +60,12 @@ export function AdminHome() {
             ←
           </button>
           <h1 className="text-xl font-bold text-charcoal font-display">Admin</h1>
-          <div className="w-8" /> {/* Spacer for alignment */}
+          <button
+            onClick={() => navigate('/dev-setup')}
+            className="text-sm text-eggplant underline underline-offset-4 hover:text-charcoal transition-colors"
+          >
+            Testing overrides
+          </button>
         </div>
       </header>
 
