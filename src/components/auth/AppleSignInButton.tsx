@@ -23,13 +23,13 @@ export function AppleSignInButton({ onSignIn }: AppleSignInButtonProps) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="w-full flex flex-col gap-2">
       <Button
         variant="secondary"
         size="lg"
         onClick={handleClick}
         loading={loading}
-        className="w-full max-w-xs"
+        className="w-full"
         icon={
           !loading && (
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">

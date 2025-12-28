@@ -146,7 +146,7 @@ export interface NotificationLog {
 /**
  * Auth provider types
  */
-export type AuthProvider = 'google' | 'apple';
+export type AuthProvider = 'google' | 'apple' | 'email';
 
 /**
  * Default values for new users

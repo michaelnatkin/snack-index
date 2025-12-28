@@ -1,5 +1,7 @@
 import {
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   GoogleAuthProvider,
   OAuthProvider,
   signOut as firebaseSignOut,
@@ -44,6 +46,22 @@ export async function signInWithApple(): Promise<User> {
 }
 
 /**
+ * Sign in with email and password
+ */
+export async function signInWithEmail(email: string, password: string): Promise<User> {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return await getOrCreateUserDocument(result.user);
+}
+
+/**
+ * Sign up with email and password
+ */
+export async function signUpWithEmail(email: string, password: string): Promise<User> {
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  return await getOrCreateUserDocument(result.user);
+}
+
+/**
  * Sign in with the specified provider
  */
 export async function signIn(provider: AuthProvider): Promise<User> {
@@ -52,6 +70,8 @@ export async function signIn(provider: AuthProvider): Promise<User> {
       return signInWithGoogle();
     case 'apple':
       return signInWithApple();
+    case 'email':
+      throw new Error('Use signInWithEmail or signUpWithEmail for email authentication');
     default:
       throw new Error(`Unknown auth provider: ${provider}`);
   }
@@ -88,7 +108,7 @@ export async function getOrCreateUserDocument(firebaseUser: FirebaseUser): Promi
   const newUser: Omit<User, 'id'> = {
     email: firebaseUser.email || '',
     displayName: firebaseUser.displayName || 'Snacker',
-    photoURL: firebaseUser.photoURL || undefined,
+    ...(firebaseUser.photoURL ? { photoURL: firebaseUser.photoURL } : {}),
     createdAt: now,
     lastActiveAt: now,
     preferences: DEFAULT_USER_PREFERENCES,

@@ -13,6 +13,7 @@ import { PlaceDetail } from '@/components/place/PlaceDetail';
 import { MySnacksScreen } from '@/components/mysnacks/MySnacksScreen';
 import { SettingsScreen } from '@/components/settings/SettingsScreen';
 import { ShareLanding } from '@/components/share/ShareLanding';
+import { DevSetup } from '@/components/dev/DevSetup';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 // Admin Guard component
@@ -113,6 +114,12 @@ function AppRoutes() {
       <Route
         path="/s/:placeId/dish/:dishId"
         element={<ShareLanding />}
+      />
+
+      {/* Dev setup route */}
+      <Route
+        path="/dev-setup"
+        element={<DevSetup />}
       />
       <Route
         path="/settings"
