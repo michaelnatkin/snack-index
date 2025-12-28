@@ -35,7 +35,7 @@ export async function getAllPlaces(): Promise<Place[]> {
  */
 export async function getActivePlaces(): Promise<Place[]> {
   const placesRef = collection(db, 'places');
-  const q = query(placesRef, where('isActive', '==', true), orderBy('name'));
+  const q = query(placesRef, where('isActive', '==', true));
   const snapshot = await getDocs(q);
   
   return snapshot.docs.map((doc) => ({
