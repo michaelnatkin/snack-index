@@ -7,7 +7,29 @@ import { AuthGuard } from '@/components/auth/AuthGuard';
 import { PermissionsScreen } from '@/components/onboarding/PermissionsScreen';
 import { DietarySheet } from '@/components/onboarding/DietarySheet';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { AdminHome } from '@/components/admin/AdminHome';
+import { PlaceEditor } from '@/components/admin/PlaceEditor';
+import { DishEditor } from '@/components/admin/DishEditor';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+
+// Admin Guard component
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const { isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/home" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 // Placeholder Home screen
 function HomeScreen() {
@@ -17,7 +39,6 @@ function HomeScreen() {
   // Show dietary sheet on first load
   useEffect(() => {
     if (user && !user.onboarding.hasSeenDietarySheet) {
-      // Small delay to let the page render first
       const timer = setTimeout(() => {
         setShowDietarySheet(true);
       }, 500);
@@ -75,7 +96,7 @@ function MySnacksScreen() {
 
 // Placeholder Settings screen
 function SettingsScreen() {
-  const { signOut } = useAuth();
+  const { signOut, isAdmin } = useAuth();
   const { user } = useUserStore();
 
   return (
@@ -91,6 +112,16 @@ function SettingsScreen() {
             <p className="text-sm text-text-muted">Signed in as</p>
             <p className="font-medium text-charcoal">{user?.email}</p>
           </div>
+
+          {/* Admin button (conditional) */}
+          {isAdmin && (
+            <a
+              href="/admin"
+              className="block w-full bg-eggplant text-cream text-center py-3 rounded-lg font-medium hover:bg-charcoal transition-colors"
+            >
+              Admin Dashboard →
+            </a>
+          )}
 
           {/* Placeholder sections */}
           <div className="space-y-4">
@@ -136,7 +167,6 @@ function AppRoutes() {
         path="/"
         element={
           isAuthenticated ? (
-            // Check if onboarding is complete
             user?.onboarding.completed ? (
               <Navigate to="/home" replace />
             ) : (
@@ -180,6 +210,38 @@ function AppRoutes() {
         element={
           <AuthGuard>
             <SettingsScreen />
+          </AuthGuard>
+        }
+      />
+
+      {/* Admin routes */}
+      <Route
+        path="/admin"
+        element={
+          <AuthGuard>
+            <AdminGuard>
+              <AdminHome />
+            </AdminGuard>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/admin/place/:placeId"
+        element={
+          <AuthGuard>
+            <AdminGuard>
+              <PlaceEditor />
+            </AdminGuard>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/admin/place/:placeId/dish/:dishId"
+        element={
+          <AuthGuard>
+            <AdminGuard>
+              <DishEditor />
+            </AdminGuard>
           </AuthGuard>
         }
       />

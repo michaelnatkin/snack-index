@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own document
+      allow read: if isOwner(userId);
+      
+      // Users can create their own document on signup
+      allow create: if isOwner(userId);
+      
+      // Users can update their own document (except isAdmin field)
+      allow update: if isOwner(userId) && 
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']) ||
+         request.resource.data.isAdmin == resource.data.isAdmin);
+      
+      // Admins can read all users
+      allow read: if isAdmin();
+    }
+
+    // Places collection - admin only write, authenticated read
+    match /places/{placeId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Dishes collection - admin only write, authenticated read
+    match /dishes/{dishId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // UserPlaceInteractions - users can manage their own
+    match /userPlaceInteractions/{interactionId} {
+      allow read: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      
+      // Allow querying by userId
+      allow list: if isAuthenticated() && 
+        request.query.limit <= 100;
+    }
+
+    // Waitlist entries - anyone can create, admin can read
+    match /waitlistEntries/{entryId} {
+      allow create: if true;  // Anyone can join waitlist
+      allow read: if isAdmin();
+    }
+
+    // Notification logs - admin read, system write (via cloud functions)
+    match /notificationLogs/{logId} {
+      allow read: if isAdmin();
+      // Write will be done via Cloud Functions
+    }
+  }
+}
+
