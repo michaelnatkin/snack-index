@@ -1,26 +1,34 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { addToWaitlist } from '@/lib/waitlist';
 import type { Place } from '@/types/models';
 
 interface NotInAreaStateProps {
   previewPlaces?: Place[];
+  userLocation?: { latitude: number; longitude: number };
 }
 
-export function NotInAreaState({ previewPlaces = [] }: NotInAreaStateProps) {
+export function NotInAreaState({ previewPlaces = [], userLocation }: NotInAreaStateProps) {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
     setSubmitting(true);
+    setError(null);
     
-    // In production, this would save to Firestore waitlistEntries
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      await addToWaitlist(email, userLocation);
+      setSubmitted(true);
+    } catch (err) {
+      setError('Failed to join waitlist. Please try again.');
+      console.error('Waitlist error:', err);
+    }
     
-    setSubmitted(true);
     setSubmitting(false);
   };
 
@@ -79,6 +87,9 @@ export function NotInAreaState({ previewPlaces = [] }: NotInAreaStateProps) {
           >
             Tell me when you launch
           </Button>
+          {error && (
+            <p className="text-sm text-paprika text-center">{error}</p>
+          )}
         </form>
       )}
     </div>
