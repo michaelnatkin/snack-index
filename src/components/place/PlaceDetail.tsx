@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { CelebrationModal } from '@/components/home/CelebrationModal';
 import { getPlace, getActiveDishesForPlace, getHeroDishForPlace } from '@/lib/places';
-import { getPlaceHours, getGoogleMapsUrl } from '@/lib/googlePlaces';
+import { getPlaceHours, getGoogleMapsUrl, getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
 import { markPlaceVisited } from '@/lib/interactions';
 import { formatDistance, calculateDistance } from '@/lib/location';
 import { useUserStore } from '@/stores/userStore';
@@ -23,6 +23,7 @@ export function PlaceDetail() {
   const [isOpen, setIsOpen] = useState(true);
   const [closeTime, setCloseTime] = useState<string | undefined>();
   const [distance, setDistance] = useState<number | undefined>();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [visitCount, setVisitCount] = useState(0);
@@ -76,6 +77,23 @@ export function PlaceDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placeId]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPhoto = async () => {
+      if (!place?.googlePlaceId) return;
+      const url = await getGooglePlacePhotoUrl(place.googlePlaceId, 1200);
+      if (isMounted) {
+        setPhotoUrl(url);
+      }
+    };
+
+    loadPhoto();
+    return () => {
+      isMounted = false;
+    };
+  }, [place?.googlePlaceId]);
+
   const handleGetDirections = async () => {
     if (!place || !user) return;
 
@@ -91,7 +109,19 @@ export function PlaceDetail() {
   const handleCelebrationDismiss = () => {
     setShowCelebration(false);
     if (place) {
-      window.open(getGoogleMapsUrl(place.googlePlaceId), '_blank');
+      const origin = user?.lastKnownLocation
+        ? {
+            latitude: user.lastKnownLocation.latitude,
+            longitude: user.lastKnownLocation.longitude,
+          }
+        : undefined;
+      window.open(
+        getGoogleMapsUrl(place.googlePlaceId, origin, {
+          latitude: place.latitude,
+          longitude: place.longitude,
+        }),
+        '_blank'
+      );
     }
   };
 
@@ -166,9 +196,9 @@ export function PlaceDetail() {
       <div className="max-w-[42rem] mx-auto">
         {/* Hero Image */}
         <div className="h-48 bg-gradient-to-br from-honey via-paprika to-eggplant flex items-center justify-center">
-          {place.imageURL ? (
+          {place.imageURL || photoUrl ? (
             <img
-              src={place.imageURL}
+              src={place.imageURL || photoUrl || ''}
               alt={place.name}
               className="w-full h-full object-cover"
             />

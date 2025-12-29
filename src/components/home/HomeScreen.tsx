@@ -45,11 +45,13 @@ export function HomeScreen() {
   const [recommendations, setRecommendations] = useState<PlaceRecommendation[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [resultType, setResultType] = useState<'loading' | 'recommendations' | 'nothing_open' | 'not_in_area' | 'all_seen'>('loading');
+  const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // Load recommendations on mount
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      const loadStart = Date.now();
       
       // Get current location (allow admin override)
       const locationResult = overrideLocation
@@ -63,21 +65,60 @@ export function HomeScreen() {
       }
 
       const { latitude, longitude } = locationResult.coordinates;
+      setUserCoordinates({ latitude, longitude });
       const nowOverride = overrideTimeIso ? new Date(overrideTimeIso) : undefined;
       const dietaryFilters = user?.preferences.dietaryFilters || {
         vegetarian: false,
         vegan: false,
         glutenFree: false,
       };
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'H3',
+          location: 'HomeScreen.tsx:loadData',
+          message: 'home load start',
+          data: {
+            hasOverrideLocation: Boolean(overrideLocation),
+            hasOverrideTime: Boolean(overrideTimeIso),
+            userIdPresent: Boolean(user?.id),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       try {
         // Determine high-level state
-        const nearest = await getNearestOpenPlace(
+      const nearest = await getNearestOpenPlace(
           { latitude, longitude },
           dietaryFilters,
           user?.id || '',
           Infinity,
           nowOverride
         );
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'debug-session',
+            runId: 'pre-fix',
+            hypothesisId: 'H3',
+            location: 'HomeScreen.tsx:loadData',
+            message: 'nearest result',
+            data: {
+              type: nearest.type,
+              elapsedMs: Date.now() - loadStart,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
 
         if (nearest.type === 'not_in_area') {
           setPreviewPlaces(nearest.previewPlaces || []);
@@ -104,6 +145,25 @@ export function HomeScreen() {
           Infinity,
           nowOverride
         );
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'debug-session',
+            runId: 'pre-fix',
+            hypothesisId: 'H3',
+            location: 'HomeScreen.tsx:loadData',
+            message: 'queue result',
+            data: {
+              count: recs.length,
+              elapsedMs: Date.now() - loadStart,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
 
         if (recs.length === 0) {
           setResultType('nothing_open');
@@ -201,8 +261,17 @@ export function HomeScreen() {
     try {
       const count = await markPlaceVisited(user.id, currentRecommendation.place.id);
       setVisitCount(count);
-      setShowCelebration(true);
-      setPendingMapUrl(getGoogleMapsUrl(currentRecommendation.place.googlePlaceId));
+    setShowCelebration(true);
+    setPendingMapUrl(
+      getGoogleMapsUrl(
+        currentRecommendation.place.googlePlaceId,
+        userCoordinates || overrideLocation || undefined,
+        {
+          latitude: currentRecommendation.place.latitude,
+          longitude: currentRecommendation.place.longitude,
+        }
+      )
+    );
     } catch (err) {
       console.error('Failed to mark visited:', err);
       setToast('Could not mark visited');

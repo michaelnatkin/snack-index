@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { getPlace, getActiveDishesForPlace, getDish } from '@/lib/places';
-import { getGoogleMapsUrl } from '@/lib/googlePlaces';
+import { getGoogleMapsUrl, getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
 import { useAuth } from '@/hooks/useAuth';
 import type { Place, Dish } from '@/types/models';
 
@@ -17,6 +17,7 @@ export function ShareLanding() {
   const [dish, setDish] = useState<Dish | null>(null);
   const [allDishes, setAllDishes] = useState<Dish[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (placeId) {
@@ -31,6 +32,23 @@ export function ShareLanding() {
       navigate(`/place/${placeId}`, { replace: true });
     }
   }, [authLoading, isAuthenticated, place, placeId, navigate]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPhoto = async () => {
+      if (!place?.googlePlaceId) return;
+      const url = await getGooglePlacePhotoUrl(place.googlePlaceId, 1200);
+      if (isMounted) {
+        setPhotoUrl(url);
+      }
+    };
+
+    loadPhoto();
+    return () => {
+      isMounted = false;
+    };
+  }, [place?.googlePlaceId]);
 
   const loadData = async () => {
     setLoading(true);
@@ -65,7 +83,13 @@ export function ShareLanding() {
 
   const handleGetDirections = () => {
     if (place) {
-      window.open(getGoogleMapsUrl(place.googlePlaceId), '_blank');
+      window.open(
+        getGoogleMapsUrl(place.googlePlaceId, undefined, {
+          latitude: place.latitude,
+          longitude: place.longitude,
+        }),
+        '_blank'
+      );
     }
   };
 
@@ -107,9 +131,9 @@ export function ShareLanding() {
     <div className="min-h-screen bg-background">
       {/* Hero Image */}
       <div className="h-64 bg-gradient-to-br from-honey via-paprika to-eggplant flex items-center justify-center relative">
-        {place.imageURL ? (
+        {place.imageURL || photoUrl ? (
           <img
-            src={place.imageURL}
+            src={place.imageURL || photoUrl || ''}
             alt={place.name}
             className="w-full h-full object-cover"
           />

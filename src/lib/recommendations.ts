@@ -1,9 +1,18 @@
 import { getActivePlaces, getActiveDishesForPlace, getHeroDishForPlace } from './places';
 import { getPlaceHours } from './googlePlaces';
-import { calculateDistance, isInSeattleArea, type Coordinates } from './location';
+import { isInSeattleArea, calculateDistance, type Coordinates } from './location';
 import type { Place, Dish, DietaryFilters, UserPlaceInteraction } from '@/types/models';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  startAt,
+  endAt,
+} from 'firebase/firestore';
 import { db } from './firebase';
+import { geohashQueryBounds, distanceBetween } from 'geofire-common';
 
 export interface PlaceRecommendation {
   place: Place;
@@ -21,6 +30,62 @@ export interface RecommendationResult {
   previewPlaces?: Place[];
 }
 
+const DEFAULT_SEARCH_RADIUS_MILES = 20;
+const MAX_SEARCH_RADIUS_MILES = 50;
+const MILES_TO_METERS = 1609.34;
+
+type PlaceWithDistance = { place: Place; distance: number };
+
+function resolveSearchRadius(maxDistanceMiles: number): number {
+  if (!Number.isFinite(maxDistanceMiles)) return DEFAULT_SEARCH_RADIUS_MILES;
+  if (maxDistanceMiles <= 0) return DEFAULT_SEARCH_RADIUS_MILES;
+  return Math.min(maxDistanceMiles, MAX_SEARCH_RADIUS_MILES);
+}
+
+async function getNearbyActivePlaces(
+  userLocation: Coordinates,
+  maxDistanceMiles: number
+): Promise<PlaceWithDistance[]> {
+  const radiusMiles = resolveSearchRadius(maxDistanceMiles);
+  const center: [number, number] = [userLocation.latitude, userLocation.longitude];
+  const bounds = geohashQueryBounds(center, radiusMiles * MILES_TO_METERS);
+  const placesRef = collection(db, 'places');
+
+  const queries = bounds.map(([start, end]) =>
+    query(
+      placesRef,
+      where('isActive', '==', true),
+      orderBy('geohash'),
+      startAt(start),
+      endAt(end)
+    )
+  );
+
+  const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
+  const seen = new Map<string, PlaceWithDistance>();
+
+  snapshots.forEach((snap) => {
+    snap.docs.forEach((docSnap) => {
+      const data = docSnap.data() as Place;
+      const latitude = (data as Place).latitude;
+      const longitude = (data as Place).longitude;
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
+
+      const distanceInMeters = distanceBetween(center, [latitude, longitude]) * 1000;
+      const distanceInMiles = distanceInMeters / MILES_TO_METERS;
+
+      if (distanceInMiles <= radiusMiles && !seen.has(docSnap.id)) {
+        seen.set(docSnap.id, {
+          place: { id: docSnap.id, ...data } as Place,
+          distance: distanceInMiles,
+        });
+      }
+    });
+  });
+
+  return Array.from(seen.values()).sort((a, b) => a.distance - b.distance);
+}
+
 /**
  * Get the nearest open place matching user preferences
  */
@@ -31,47 +96,87 @@ export async function getNearestOpenPlace(
   maxDistanceMiles: number = Infinity,
   currentTimeOverride?: Date
 ): Promise<RecommendationResult> {
+  const functionStart = Date.now();
+  const metrics = {
+    totalPlaces: 0,
+    processedPlaces: 0,
+    dismissedCount: 0,
+    dishMs: 0,
+    hoursMs: 0,
+    heroMs: 0,
+  };
+
   // Check if user is in Seattle area
   if (!isInSeattleArea(userLocation)) {
     const previewPlaces = await getActivePlaces();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'recommendations.ts:getNearestOpenPlace',
+        message: 'not in area',
+        data: {
+          totalMs: Date.now() - functionStart,
+          totalPlaces: metrics.totalPlaces,
+          processedPlaces: metrics.processedPlaces,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     return {
       type: 'not_in_area',
       previewPlaces: previewPlaces.slice(0, 6),
     };
   }
 
-  // Get all active places
-  const allPlaces = await getActivePlaces();
+  // Get nearby active places using geohash queries
+  let nearbyPlaces = await getNearbyActivePlaces(userLocation, maxDistanceMiles);
 
-  if (allPlaces.length === 0) {
+  if (nearbyPlaces.length === 0) {
+    const allPlaces = await getActivePlaces();
+    const radiusMiles = resolveSearchRadius(maxDistanceMiles);
+    nearbyPlaces = allPlaces
+      .map((place) => ({
+        place,
+        distance: calculateDistance(userLocation, {
+          latitude: place.latitude,
+          longitude: place.longitude,
+        }),
+      }))
+      .filter(({ distance }) => distance <= radiusMiles)
+      .sort((a, b) => a.distance - b.distance);
+  }
+
+  metrics.totalPlaces = nearbyPlaces.length;
+
+  if (nearbyPlaces.length === 0) {
     return { type: 'nothing_open' };
   }
 
   // Get user's dismissed places
   const dismissedPlaceIds = await getDismissedPlaceIds(userId);
+  metrics.dismissedCount = dismissedPlaceIds.size;
 
   // Filter and score places
-  const placesWithData: Array<{
-    place: Place;
-    distance: number;
-    dishes: Dish[];
-    heroDish: Dish | null;
-    isOpen: boolean;
-    closeTime?: string;
-    nextOpenInMinutes?: number | null;
-  }> = [];
+  let nextClosedCandidate:
+    | {
+        place: Place;
+        nextOpenInMinutes: number;
+        closeTime?: string;
+      }
+    | null = null;
 
-  for (const place of allPlaces) {
+  for (const { place, distance } of nearbyPlaces) {
     // Skip dismissed places
     if (dismissedPlaceIds.has(place.id)) {
+      metrics.dismissedCount += 0; // explicit tracking retained for logs
       continue;
     }
-
-    // Calculate distance
-    const distance = calculateDistance(userLocation, {
-      latitude: place.latitude,
-      longitude: place.longitude,
-    });
 
     // Skip places too far away
     if (distance > maxDistanceMiles) {
@@ -79,7 +184,10 @@ export async function getNearestOpenPlace(
     }
 
     // Get dishes that match dietary filters
+    const dishStart = Date.now();
     const allDishes = await getActiveDishesForPlace(place.id);
+    const dishDuration = Date.now() - dishStart;
+    metrics.dishMs += dishDuration;
     const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
 
     // Skip places with no matching dishes
@@ -91,8 +199,12 @@ export async function getNearestOpenPlace(
     let isOpen = true;
     let closeTime: string | undefined;
     let nextOpenInMinutes: number | null = null;
+    let hoursDuration: number | null = null;
     try {
+      const hoursStart = Date.now();
       const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
+      hoursDuration = Date.now() - hoursStart;
+      metrics.hoursMs += hoursDuration;
       isOpen = hours.isOpen;
       closeTime = hours.closeTime;
       if (!hours.isOpen && hours.periods) {
@@ -104,53 +216,149 @@ export async function getNearestOpenPlace(
     }
 
     // Get hero dish
+    const heroStart = Date.now();
     const heroDish = await getHeroDishForPlace(place.id);
+    const heroDuration = Date.now() - heroStart;
+    metrics.heroMs += heroDuration;
 
-    placesWithData.push({
-      place,
-      distance,
-      dishes: matchingDishes,
-      heroDish,
-      isOpen,
-      closeTime,
-      nextOpenInMinutes,
-    });
-  }
+    metrics.processedPlaces += 1;
 
-  // Find open places sorted by distance
-  const openPlaces = placesWithData
-    .filter((p) => p.isOpen)
-    .sort((a, b) => a.distance - b.distance);
+    if (metrics.processedPlaces <= 5) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'H5',
+          location: 'recommendations.ts:getNearestOpenPlace',
+          message: 'per-place timings',
+          data: {
+            placeId: place.id,
+            distance,
+            dishMs: dishDuration,
+            hoursMs: hoursDuration,
+            heroMs: heroDuration,
+            isOpen,
+            matchingDishes: matchingDishes.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    }
 
-  if (openPlaces.length > 0) {
-    const nearest = openPlaces[0];
-    return {
-      type: 'recommendation',
-      recommendation: {
-        place: nearest.place,
-        heroDish: nearest.heroDish,
-        dishes: nearest.dishes,
-        distance: nearest.distance,
-        isOpen: nearest.isOpen,
-        closeTime: nearest.closeTime,
-      },
-    };
+    if (isOpen) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'H1',
+          location: 'recommendations.ts:getNearestOpenPlace',
+          message: 'returning open recommendation',
+          data: {
+            totalMs: Date.now() - functionStart,
+            totalPlaces: metrics.totalPlaces,
+            processedPlaces: metrics.processedPlaces,
+            dismissedCount: metrics.dismissedCount,
+            dishMs: metrics.dishMs,
+            hoursMs: metrics.hoursMs,
+            heroMs: metrics.heroMs,
+            openCount: metrics.processedPlaces, // processed until first open
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
+      return {
+        type: 'recommendation',
+        recommendation: {
+          place,
+          heroDish,
+          dishes: matchingDishes,
+          distance,
+          isOpen,
+          closeTime,
+        },
+      };
+    }
+
+    // Track earliest next opening only if we still have no open places
+    if (nextOpenInMinutes !== null) {
+      if (!nextClosedCandidate || nextOpenInMinutes < nextClosedCandidate.nextOpenInMinutes) {
+        nextClosedCandidate = {
+          place,
+          nextOpenInMinutes,
+          closeTime,
+        };
+      }
+    }
   }
 
   // All places are closed - find next to open with countdown
-  const closestClosed = placesWithData
-    .filter((p) => p.nextOpenInMinutes !== null)
-    .sort((a, b) => (a.nextOpenInMinutes ?? Infinity) - (b.nextOpenInMinutes ?? Infinity))[0];
-
-  if (closestClosed && closestClosed.nextOpenInMinutes !== null) {
+  if (nextClosedCandidate) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'recommendations.ts:getNearestOpenPlace',
+        message: 'all closed; next to open',
+        data: {
+          totalMs: Date.now() - functionStart,
+          totalPlaces: metrics.totalPlaces,
+          processedPlaces: metrics.processedPlaces,
+          dismissedCount: metrics.dismissedCount,
+          dishMs: metrics.dishMs,
+          hoursMs: metrics.hoursMs,
+          heroMs: metrics.heroMs,
+          candidate: nextClosedCandidate.place.name,
+          opensInMinutes: nextClosedCandidate.nextOpenInMinutes,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     return {
       type: 'nothing_open',
       nextToOpen: {
-        place: closestClosed.place,
-        opensIn: formatMinutesUntil(closestClosed.nextOpenInMinutes),
+        place: nextClosedCandidate.place,
+        opensIn: formatMinutesUntil(nextClosedCandidate.nextOpenInMinutes),
       },
     };
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'pre-fix',
+      hypothesisId: 'H1',
+      location: 'recommendations.ts:getNearestOpenPlace',
+      message: 'nearestOpen aggregation',
+      data: {
+        totalMs: Date.now() - functionStart,
+        totalPlaces: metrics.totalPlaces,
+        processedPlaces: metrics.processedPlaces,
+        dismissedCount: metrics.dismissedCount,
+        dishMs: metrics.dishMs,
+        hoursMs: metrics.hoursMs,
+        heroMs: metrics.heroMs,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   return { type: 'all_seen' };
 }
@@ -166,26 +374,49 @@ export async function getRecommendationQueue(
   maxDistanceMiles: number = Infinity,
   currentTimeOverride?: Date
 ): Promise<PlaceRecommendation[]> {
+  const functionStart = Date.now();
+  const metrics = {
+    totalPlaces: 0,
+    processedPlaces: 0,
+    dismissedCount: 0,
+    dishMs: 0,
+    hoursMs: 0,
+    heroMs: 0,
+  };
+
   if (!isInSeattleArea(userLocation)) {
     return [];
   }
 
-  const allPlaces = await getActivePlaces();
+  let placesWithDistance = await getNearbyActivePlaces(userLocation, maxDistanceMiles);
+
+  if (placesWithDistance.length === 0) {
+    const allPlaces = await getActivePlaces();
+    const radiusMiles = resolveSearchRadius(maxDistanceMiles);
+    placesWithDistance = allPlaces
+      .map((place) => ({
+        place,
+        distance: calculateDistance(userLocation, {
+          latitude: place.latitude,
+          longitude: place.longitude,
+        }),
+      }))
+      .filter(({ distance }) => distance <= radiusMiles)
+      .sort((a, b) => a.distance - b.distance);
+  }
+
+  metrics.totalPlaces = placesWithDistance.length;
   const dismissedPlaceIds = await getDismissedPlaceIds(userId);
+  metrics.dismissedCount = dismissedPlaceIds.size;
 
   const recommendations: PlaceRecommendation[] = [];
 
-  for (const place of allPlaces) {
+  for (const { place, distance } of placesWithDistance) {
     if (dismissedPlaceIds.has(place.id)) continue;
 
-    const distance = calculateDistance(userLocation, {
-      latitude: place.latitude,
-      longitude: place.longitude,
-    });
-
-    if (distance > maxDistanceMiles) continue;
-
+    const dishStart = Date.now();
     const allDishes = await getActiveDishesForPlace(place.id);
+    metrics.dishMs += Date.now() - dishStart;
     const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
 
     if (matchingDishes.length === 0) continue;
@@ -193,7 +424,9 @@ export async function getRecommendationQueue(
     let isOpen = true;
     let closeTime: string | undefined;
     try {
+      const hoursStart = Date.now();
       const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
+      metrics.hoursMs += Date.now() - hoursStart;
       isOpen = hours.isOpen;
       closeTime = hours.closeTime;
     } catch {
@@ -202,7 +435,9 @@ export async function getRecommendationQueue(
 
     if (!isOpen) continue;
 
+    const heroStart = Date.now();
     const heroDish = await getHeroDishForPlace(place.id);
+    metrics.heroMs += Date.now() - heroStart;
 
     recommendations.push({
       place,
@@ -212,12 +447,40 @@ export async function getRecommendationQueue(
       isOpen,
       closeTime,
     });
+    metrics.processedPlaces += 1;
 
     if (recommendations.length >= limit) break;
   }
 
   // Sort by distance
-  return recommendations.sort((a, b) => a.distance - b.distance);
+  const sorted = recommendations.sort((a, b) => a.distance - b.distance);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'pre-fix',
+      hypothesisId: 'H2',
+      location: 'recommendations.ts:getRecommendationQueue',
+      message: 'queue aggregation',
+      data: {
+        totalMs: Date.now() - functionStart,
+        totalPlaces: metrics.totalPlaces,
+        processedPlaces: metrics.processedPlaces,
+        dismissedCount: metrics.dismissedCount,
+        dishMs: metrics.dishMs,
+        hoursMs: metrics.hoursMs,
+        heroMs: metrics.heroMs,
+        returned: sorted.length,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  return sorted;
 }
 
 /**

@@ -46,13 +46,15 @@ describe('formatDistance', () => {
     expect(formatDistance(0.09)).toBe('nearby');
   });
 
-  it('formats distances under a mile in feet', () => {
-    expect(formatDistance(0.1)).toBe('100 ft');
-    expect(formatDistance(0.5)).toBe('500 ft');
-    expect(formatDistance(0.9)).toBe('900 ft');
+  it('formats distances under a quarter mile in feet', () => {
+    expect(formatDistance(0.1)).toBe('528 ft');
+    expect(formatDistance(0.2)).toBe('1056 ft');
+    expect(formatDistance(0.24)).toBe('1267 ft');
   });
 
   it('formats distances over a mile with one decimal', () => {
+    expect(formatDistance(0.25)).toBe('0.3 mi');
+    expect(formatDistance(0.9)).toBe('0.9 mi');
     expect(formatDistance(1.0)).toBe('1.0 mi');
     expect(formatDistance(1.5)).toBe('1.5 mi');
     expect(formatDistance(2.3)).toBe('2.3 mi');

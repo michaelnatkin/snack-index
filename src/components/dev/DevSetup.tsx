@@ -17,11 +17,27 @@ export function DevSetup() {
   const [tempLat, setTempLat] = useState(overrideLocation?.latitude?.toString() || '');
   const [tempLng, setTempLng] = useState(overrideLocation?.longitude?.toString() || '');
   const [tempLabel, setTempLabel] = useState(overrideLocation?.label || '');
-  const [tempTime, setTempTime] = useState(() => {
+  const initialTempTime = (() => {
     if (!overrideTimeIso) return '';
     const d = new Date(overrideTimeIso);
-    return d.toISOString().slice(0, 16); // yyyy-MM-ddTHH:mm for datetime-local
-  });
+    const localIso = [
+      d.getFullYear(),
+      '-',
+      String(d.getMonth() + 1).padStart(2, '0'),
+      '-',
+      String(d.getDate()).padStart(2, '0'),
+      'T',
+      String(d.getHours()).padStart(2, '0'),
+      ':',
+      String(d.getMinutes()).padStart(2, '0'),
+    ].join('');
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H6',location:'DevSetup.tsx:initialTempTime',message:'Computed initial temp time from override',data:{overrideTimeIso,localIso},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return localIso;
+  })();
+
+  const [tempTime, setTempTime] = useState(initialTempTime);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
@@ -173,6 +189,9 @@ export function DevSetup() {
                     return;
                   }
                   const asDate = new Date(tempTime);
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H7',location:'DevSetup.tsx:applyTime',message:'Apply time clicked',data:{input:tempTime,asDate:isNaN(asDate.getTime())?'invalid':asDate.toISOString(),offsetMinutes:asDate.getTimezoneOffset()},timestamp:Date.now()})}).catch(()=>{});
+                  // #endregion
                   if (isNaN(asDate.getTime())) {
                     alert('Enter a valid datetime');
                     return;

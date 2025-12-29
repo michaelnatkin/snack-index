@@ -81,6 +81,7 @@ export interface Place {
   address: string;
   latitude: number;
   longitude: number;
+  geohash?: string;
   description?: string;
   imageURL?: string;
   createdAt: Timestamp;

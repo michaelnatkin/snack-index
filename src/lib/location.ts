@@ -122,8 +122,9 @@ export function formatDistance(miles: number): string {
   if (miles < 0.1) {
     return 'nearby';
   }
-  if (miles < 1) {
-    return `${(miles * 10).toFixed(0)}00 ft`;
+  if (miles < 0.25) {
+    const feet = Math.round(miles * 5280);
+    return `${feet} ft`;
   }
   return `${miles.toFixed(1)} mi`;
 }

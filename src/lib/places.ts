@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Place, Dish } from '@/types/models';
+import { geohashForLocation } from 'geofire-common';
 
 // ============= Places CRUD =============
 
@@ -65,6 +66,7 @@ export async function createPlace(
   const placesRef = collection(db, 'places');
   const docRef = await addDoc(placesRef, {
     ...place,
+    geohash: geohashForLocation([place.latitude, place.longitude]),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -79,8 +81,21 @@ export async function updatePlace(
   updates: Partial<Omit<Place, 'id' | 'createdAt'>>
 ): Promise<void> {
   const docRef = doc(db, 'places', placeId);
+  let geohash: string | undefined;
+
+  if (updates.latitude !== undefined || updates.longitude !== undefined) {
+    const existing = await getDoc(docRef);
+    const current = existing.data() as Place | undefined;
+    const latitude = updates.latitude ?? current?.latitude;
+    const longitude = updates.longitude ?? current?.longitude;
+    if (typeof latitude === 'number' && typeof longitude === 'number') {
+      geohash = geohashForLocation([latitude, longitude]);
+    }
+  }
+
   await updateDoc(docRef, {
     ...updates,
+    ...(geohash ? { geohash } : {}),
     updatedAt: serverTimestamp(),
   });
 }

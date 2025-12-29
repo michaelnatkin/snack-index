@@ -32,6 +32,7 @@ import {
   serverTimestamp,
   connectFirestoreEmulator,
 } from 'firebase/firestore';
+import { geohashForLocation } from 'geofire-common';
 
 // Prefer .env.local, fall back to .env
 const envLocalPath = path.resolve(process.cwd(), '.env.local');
@@ -172,6 +173,7 @@ async function main() {
           address: details.address,
           latitude: details.latitude,
           longitude: details.longitude,
+          geohash: geohashForLocation([details.latitude, details.longitude]),
           ...(row.description?.trim() ? { description: row.description.trim() } : {}),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),

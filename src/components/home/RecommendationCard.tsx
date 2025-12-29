@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatDistance } from '@/lib/location';
+import { getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
 import type { PlaceRecommendation } from '@/lib/recommendations';
 
 interface RecommendationCardProps {
@@ -24,8 +25,25 @@ export function RecommendationCard({
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const { place, heroDish, dishes, distance, closeTime } = recommendation;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPhoto = async () => {
+      const url = await getGooglePlacePhotoUrl(place.googlePlaceId, 800);
+      if (isMounted) {
+        setPhotoUrl(url);
+      }
+    };
+
+    loadPhoto();
+    return () => {
+      isMounted = false;
+    };
+  }, [place.googlePlaceId]);
 
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     const point = 'touches' in e ? e.touches[0] : e;
@@ -107,9 +125,9 @@ export function RecommendationCard({
       >
         {/* Hero Image / Gradient */}
         <div className="h-48 bg-gradient-to-br from-honey via-paprika to-eggplant flex items-center justify-center">
-          {place.imageURL ? (
+          {place.imageURL || photoUrl ? (
             <img
-              src={place.imageURL}
+              src={place.imageURL || photoUrl || ''}
               alt={place.name}
               className="w-full h-full object-cover"
             />

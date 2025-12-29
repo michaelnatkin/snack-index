@@ -7,6 +7,7 @@ import { Timestamp } from 'firebase/firestore';
 // Mock google places
 vi.mock('@/lib/googlePlaces', () => ({
   getGoogleMapsUrl: vi.fn().mockReturnValue('https://maps.google.com'),
+  getGooglePlacePhotoUrl: vi.fn().mockResolvedValue(null),
 }));
 
 const mockRecommendation: PlaceRecommendation = {
@@ -76,8 +77,8 @@ describe('RecommendationCard', () => {
 
   it('displays distance and open status', () => {
     render(<RecommendationCard recommendation={mockRecommendation} {...mockHandlers} />);
-    // Distance 0.3 miles formats as "300 ft"
-    expect(screen.getByText(/300 ft/)).toBeInTheDocument();
+    // Distance 0.3 miles formats as "0.3 mi"
+    expect(screen.getByText(/0\.3 mi/)).toBeInTheDocument();
     expect(screen.getByText(/Open/)).toBeInTheDocument();
   });
 });

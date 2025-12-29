@@ -5,6 +5,8 @@
  * Falls back to mock data when no API key is provided.
  */
 
+import type { Coordinates } from './location';
+
 export interface PlaceAutocompleteResult {
   placeId: string;
   name: string;
@@ -35,6 +37,7 @@ const HOURS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 const API_BASE = 'https://places.googleapis.com/v1';
 const DEFAULT_LOCATION = { latitude: 47.6062, longitude: -122.3321 }; // Seattle
 const DEFAULT_RADIUS_METERS = 50_000;
+const photoUrlCache = new Map<string, string>();
 
 /**
  * Search for places by name (autocomplete)
@@ -136,9 +139,26 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | n
  * Check if a place is currently open
  */
 export async function getPlaceHours(placeId: string, currentTimeOverride?: Date): Promise<PlaceHours> {
+  const start = Date.now();
+
   // Check cache first
   const cached = hoursCache.get(placeId);
   if (cached && Date.now() - cached.timestamp < HOURS_CACHE_TTL) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H4',
+        location: 'googlePlaces.ts:getPlaceHours',
+        message: 'hours cache hit',
+        data: { placeId, ageMs: Date.now() - cached.timestamp, durationMs: Date.now() - start },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     return cached.hours;
   }
 
@@ -234,15 +254,110 @@ export async function getPlaceHours(placeId: string, currentTimeOverride?: Date)
     console.error('Place hours error:', err);
     const mockHours = getMockPlaceHours();
     hoursCache.set(placeId, { hours: mockHours, timestamp: Date.now() });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H4',
+        location: 'googlePlaces.ts:getPlaceHours',
+        message: 'hours fetch error fallback',
+        data: { placeId, durationMs: Date.now() - start, error: String(err) },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     return mockHours;
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'pre-fix',
+      hypothesisId: 'H4',
+      location: 'googlePlaces.ts:getPlaceHours',
+      message: 'hours fetch success',
+      data: { placeId, durationMs: Date.now() - start, cached: false },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  return hours;
 }
 
 /**
- * Generate Google Maps URL for a place
+ * Generate Google Maps walking directions URL from origin to a place.
  */
-export function getGoogleMapsUrl(placeId: string): string {
-  return `https://www.google.com/maps/place/?q=place_id:${placeId}`;
+export function getGoogleMapsUrl(
+  placeId: string,
+  origin?: Coordinates,
+  destination?: Coordinates
+): string {
+  const params = new URLSearchParams({
+    api: '1',
+    travelmode: 'walking',
+    destination_place_id: placeId,
+  });
+
+  if (destination) {
+    params.set('destination', `${destination.latitude},${destination.longitude}`);
+  } else {
+    params.set('destination', `place_id:${placeId}`);
+  }
+
+  if (origin) {
+    params.set('origin', `${origin.latitude},${origin.longitude}`);
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+/**
+ * Fetch a Google Places photo URL (publicly accessible) for a place.
+ * Caches per place + width to minimize API calls.
+ */
+export async function getGooglePlacePhotoUrl(placeId: string, maxWidthPx = 800): Promise<string | null> {
+  const cacheKey = `${placeId}:${maxWidthPx}`;
+  const cached = photoUrlCache.get(cacheKey);
+  if (cached) return cached;
+
+  const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
+  if (!apiKey || apiKey === 'undefined') {
+    console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; cannot fetch place photo');
+    return null;
+  }
+
+  try {
+    const fieldMask = 'photos';
+    const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+      },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Place photos failed: ${res.status} ${text}`);
+    }
+
+    const data = await res.json();
+    const photoName: string | undefined = data?.photos?.[0]?.name;
+    if (!photoName) return null;
+
+    const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidthPx}&key=${apiKey}`;
+    photoUrlCache.set(cacheKey, mediaUrl);
+    return mediaUrl;
+  } catch (err) {
+    console.error('Place photo error:', err);
+    return null;
+  }
 }
 
 // ============= Mock data for development =============
