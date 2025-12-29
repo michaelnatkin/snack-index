@@ -7,7 +7,7 @@
  *   address,description,name,dish_description,glutenFree,vegan,vegetarian,isHero,dish_name
  *
  * Usage:
- *   node scripts/importCsv.js ./to-import.csv
+ *   node scripts/importCsv.js ./to-import.csv [--wipe]
  *
  * Env:
  *   VITE_FIREBASE_* (same as app)
@@ -38,7 +38,9 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const csvPath = process.argv[2] || path.resolve(__dirname, '../to-import.csv');
+const args = process.argv.slice(2);
+const csvPath = args[0] || path.resolve(__dirname, '../to-import.csv');
+const shouldWipe = args.includes('--wipe');
 
 if (!fs.existsSync(csvPath)) {
   console.error(`CSV not found: ${csvPath}`);
@@ -131,10 +133,14 @@ async function main() {
     trim: true,
   });
 
-  console.log('Clearing existing dishes and places...');
-  const deletedDishes = await clearCollection('dishes');
-  const deletedPlaces = await clearCollection('places');
-  console.log(`Deleted ${deletedPlaces} places, ${deletedDishes} dishes`);
+  if (shouldWipe) {
+    console.log('Clearing existing dishes and places (wipe enabled)...');
+    const deletedDishes = await clearCollection('dishes');
+    const deletedPlaces = await clearCollection('places');
+    console.log(`Deleted ${deletedPlaces} places, ${deletedDishes} dishes`);
+  } else {
+    console.log('Wipe disabled; existing data will remain.');
+  }
 
   // Deduplicate places by name+address
   const placeMap = new Map(); // key -> { placeId, docId }
@@ -151,25 +157,30 @@ async function main() {
 
     let placeEntry = placeMap.get(key);
     if (!placeEntry) {
-      console.log(`Resolving place: ${name} (${address})`);
-      const details = await fetchPlace(`${name} ${address}`);
+      try {
+        console.log(`Resolving place: ${name} (${address})`);
+        const details = await fetchPlace(`${name} ${address}`);
 
-      const placeDoc = await addDoc(collection(db, 'places'), {
-        googlePlaceId: details.placeId,
-        name: details.name,
-        address: details.address,
-        latitude: details.latitude,
-        longitude: details.longitude,
-        description: row.description?.trim() || undefined,
-        imageURL: undefined,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        createdBy: 'import-script',
-        isActive: true,
-      });
+        const placeDoc = await addDoc(collection(db, 'places'), {
+          googlePlaceId: details.placeId,
+          name: details.name,
+          address: details.address,
+          latitude: details.latitude,
+          longitude: details.longitude,
+          description: row.description?.trim() || undefined,
+          imageURL: undefined,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          createdBy: 'import-script',
+          isActive: true,
+        });
 
-      placeEntry = { placeDocId: placeDoc.id };
-      placeMap.set(key, placeEntry);
+        placeEntry = { placeDocId: placeDoc.id };
+        placeMap.set(key, placeEntry);
+      } catch (err) {
+        console.error(`Failed to resolve place for "${name}" (${address}): ${err instanceof Error ? err.message : err}`);
+        continue; // skip dishes for unresolved place
+      }
     }
 
     const dietary = {
