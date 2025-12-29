@@ -76,10 +76,10 @@ export async function searchPlaces(
       throw new Error(`Places autocomplete failed: ${res.status} ${text}`);
     }
 
-    const data = await res.json();
+    const data = await res.json() as { suggestions?: Array<{ placePrediction?: { placeId?: string; text?: { text?: string }; structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } } }; placeId?: string; text?: { text?: string } }> };
     const suggestions = data.suggestions || [];
 
-    return suggestions.map((s: any) => ({
+    return suggestions.map((s) => ({
       placeId: s.placePrediction?.placeId ?? s.placeId ?? '',
       name: s.placePrediction?.structuredFormat?.mainText?.text ?? s.placePrediction?.text?.text ?? s.text?.text ?? '',
       address:
@@ -188,7 +188,7 @@ export async function getPlaceHours(placeId: string, currentTimeOverride?: Date)
 
     type ParsedPeriod = { open: { day: number; time: string }; close?: { day: number; time: string } };
     const periods: ParsedPeriod[] =
-      hoursData?.periods?.map((p: any) => ({
+      hoursData?.periods?.map((p: { open?: { day?: number; hourMinute?: string; hour?: number; minute?: number }; close?: { day?: number; hourMinute?: string; hour?: number; minute?: number } }) => ({
         open: {
           day: p.open?.day ?? 0,
           time: p.open?.hourMinute ?? (p.open?.hour !== undefined && p.open?.minute !== undefined

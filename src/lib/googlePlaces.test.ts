@@ -48,7 +48,7 @@ describe('getGooglePlacePhotoUrl', () => {
       ok: true,
       json: async () => ({ photos: [{ name: 'places/abc123/photos/photo-1' }] }),
       text: async () => '',
-    } as any);
+    } as unknown as Response);
 
     vi.stubGlobal('fetch', fetchMock);
     Object.assign(import.meta.env, { VITE_GOOGLE_PLACES_API_KEY: 'test-key' });

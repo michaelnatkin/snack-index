@@ -30,8 +30,8 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [showDietarySheet, setShowDietarySheet] = useState(false);
   const [showSwipeTutorial, setShowSwipeTutorial] = useState(false);
-  const [swipeNudgeShown, setSwipeNudgeShown] = useState(false);
-  const [buttonTapCount, setButtonTapCount] = useState(0);
+  const swipeNudgeShownRef = useRef(false);
+  const buttonTapCountRef = useRef(0);
   const [toast, setToast] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [dismissOpen, setDismissOpen] = useState(false);
@@ -203,20 +203,19 @@ export function HomeScreen() {
     }
   }, [user, showDietarySheet, loading, recommendations.length]);
 
-  // Button-user nudge (after 5 button taps without swiping)
-  useEffect(() => {
+  const maybeShowSwipeNudge = useCallback((nextCount: number) => {
     if (
       user &&
       !user.onboarding.hasSeenSwipeNudge &&
-      buttonTapCount >= 5 &&
-      !swipeNudgeShown
+      nextCount >= 5 &&
+      !swipeNudgeShownRef.current
     ) {
-      setSwipeNudgeShown(true);
+      swipeNudgeShownRef.current = true;
       setToast('Pro tip: Swipe the card! ← → ↑');
       setTimeout(() => setToast(null), 2500);
       updateOnboarding({ hasSeenSwipeNudge: true });
     }
-  }, [buttonTapCount, user, swipeNudgeShown, updateOnboarding]);
+  }, [updateOnboarding, user]);
 
   const handleSwipeTutorialDismiss = useCallback(async () => {
     setShowSwipeTutorial(false);
@@ -282,7 +281,8 @@ export function HomeScreen() {
 
   const handleGetDirections = async () => {
     // Track button tap
-    setButtonTapCount((c) => c + 1);
+    buttonTapCountRef.current += 1;
+    maybeShowSwipeNudge(buttonTapCountRef.current);
     await handleSwipeUp();
   };
 
@@ -293,12 +293,14 @@ export function HomeScreen() {
   };
 
   const handleNotForMe = () => {
-    setButtonTapCount((c) => c + 1);
+    buttonTapCountRef.current += 1;
+    maybeShowSwipeNudge(buttonTapCountRef.current);
     setDismissOpen(true);
   };
 
   const handleSave = () => {
-    setButtonTapCount((c) => c + 1);
+    buttonTapCountRef.current += 1;
+    maybeShowSwipeNudge(buttonTapCountRef.current);
   if (!user || !currentRecommendation) return;
 
   favoritePlace(user.id, currentRecommendation.place.id)
