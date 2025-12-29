@@ -28,7 +28,7 @@ export async function getNearestOpenPlace(
   userLocation: Coordinates,
   dietaryFilters: DietaryFilters,
   userId: string,
-  maxDistanceMiles: number = 5,
+  maxDistanceMiles: number = Infinity,
   currentTimeOverride?: Date
 ): Promise<RecommendationResult> {
   // Check if user is in Seattle area
@@ -163,7 +163,7 @@ export async function getRecommendationQueue(
   dietaryFilters: DietaryFilters,
   userId: string,
   limit: number = 10,
-  maxDistanceMiles: number = 5,
+  maxDistanceMiles: number = Infinity,
   currentTimeOverride?: Date
 ): Promise<PlaceRecommendation[]> {
   if (!isInSeattleArea(userLocation)) {

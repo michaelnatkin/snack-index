@@ -69,15 +69,13 @@ export function HomeScreen() {
         vegan: false,
         glutenFree: false,
       };
-      const maxDistance = user?.preferences.notificationDistance ?? 5;
-
       try {
         // Determine high-level state
         const nearest = await getNearestOpenPlace(
           { latitude, longitude },
           dietaryFilters,
           user?.id || '',
-          maxDistance,
+          Infinity,
           nowOverride
         );
 
@@ -103,7 +101,7 @@ export function HomeScreen() {
           dietaryFilters,
           user?.id || '',
           10,
-          maxDistance,
+          Infinity,
           nowOverride
         );
 
@@ -179,25 +177,19 @@ export function HomeScreen() {
     }
   };
 
-  const handleSwipeLeft = () => {
-    // Skip - just go to next
-    goToNext();
+  const goToPrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex((i) => Math.max(0, i - 1));
+    }
   };
 
-  const handleSwipeRight = async () => {
-    if (!user || !currentRecommendation) {
-      goToNext();
-      return;
-    }
-    try {
-      await favoritePlace(user.id, currentRecommendation.place.id);
-      setToast('Saved to My Snacks');
-      setTimeout(() => setToast(null), 2500);
-    } catch (err) {
-      console.error('Failed to save favorite:', err);
-      setToast('Could not save. Try again.');
-      setTimeout(() => setToast(null), 2500);
-    }
+  const handleSwipeLeft = () => {
+    // Navigate back
+    goToPrev();
+  };
+
+  const handleSwipeRight = () => {
+    // Navigate forward
     goToNext();
   };
 
@@ -238,7 +230,19 @@ export function HomeScreen() {
 
   const handleSave = () => {
     setButtonTapCount((c) => c + 1);
-    handleSwipeRight();
+  if (!user || !currentRecommendation) return;
+
+  favoritePlace(user.id, currentRecommendation.place.id)
+    .then(() => {
+      setToast('Saved to My Snacks');
+      setTimeout(() => setToast(null), 2500);
+      goToNext();
+    })
+    .catch((err) => {
+      console.error('Failed to save favorite:', err);
+      setToast('Could not save. Try again.');
+      setTimeout(() => setToast(null), 2500);
+    });
   };
 
   const handleDismissNever = async () => {
@@ -292,15 +296,39 @@ export function HomeScreen() {
 
       {!loading && resultType === 'recommendations' && currentRecommendation && (
         <div className="px-4 py-6">
-          {/* Recommendation Card */}
-          <RecommendationCard
-            recommendation={currentRecommendation}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-            onSwipeUp={handleSwipeUp}
-            onGetDirections={handleGetDirections}
-            onCardTap={handleCardTap}
-          />
+          <div className="relative">
+            {/* Left chevron */}
+            <button
+              aria-label="Previous"
+              onClick={goToPrev}
+              disabled={currentIndex === 0}
+              className="absolute left-0 top-1/2 -translate-y-1/2 text-4xl text-sage/60 hover:text-sage disabled:opacity-30"
+            >
+              ‹
+            </button>
+
+            {/* Recommendation Card */}
+            <div className="mx-10">
+              <RecommendationCard
+                recommendation={currentRecommendation}
+                onSwipeLeft={handleSwipeLeft}
+                onSwipeRight={handleSwipeRight}
+                onSwipeUp={handleSwipeUp}
+                onGetDirections={handleGetDirections}
+                onCardTap={handleCardTap}
+              />
+            </div>
+
+            {/* Right chevron */}
+            <button
+              aria-label="Next"
+              onClick={goToNext}
+              disabled={currentIndex >= recommendations.length - 1}
+              className="absolute right-0 top-1/2 -translate-y-1/2 text-4xl text-sage/60 hover:text-sage disabled:opacity-30"
+            >
+              ›
+            </button>
+          </div>
 
           {/* Secondary Actions */}
           <div className="flex justify-center gap-8 mt-6">
