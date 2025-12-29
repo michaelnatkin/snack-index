@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/Button';
 
 interface GoogleSignInButtonProps {
   onSignIn: () => Promise<void>;
+  id?: string;
 }
 
-export function GoogleSignInButton({ onSignIn }: GoogleSignInButtonProps) {
+export function GoogleSignInButton({ onSignIn, id }: GoogleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +26,7 @@ export function GoogleSignInButton({ onSignIn }: GoogleSignInButtonProps) {
   return (
     <div className="w-full flex flex-col gap-2">
       <Button
+        id={id}
         variant="outline"
         size="lg"
         onClick={handleClick}

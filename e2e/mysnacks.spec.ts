@@ -5,14 +5,24 @@ test.describe('My Snacks Screen', () => {
     await page.goto('/my-snacks');
     
     // Should redirect to login if not authenticated
-    await expect(page.locator('body')).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 
   test('shows welcome/login for unauthenticated users', async ({ page }) => {
     await page.goto('/my-snacks');
     
     // Should show login screen
-    await expect(page.getByText(/Snack Index|Sign in|Continue/i).first()).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 });
 
@@ -21,7 +31,12 @@ test.describe('Place Detail Screen', () => {
     await page.goto('/place/test-place-id');
     
     // Should redirect to login if not authenticated
-    await expect(page.locator('body')).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 });
 

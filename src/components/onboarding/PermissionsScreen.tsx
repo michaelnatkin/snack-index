@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
-import { requestLocation } from '@/lib/location';
+import { requestLocation, getLocationPermissionState } from '@/lib/location';
 import { requestNotificationPermission } from '@/lib/notifications';
 import { useUserStore } from '@/stores/userStore';
 
@@ -9,7 +9,7 @@ type PermissionStep = 'initial' | 'requesting' | 'location-denied' | 'complete';
 
 export function PermissionsScreen() {
   const navigate = useNavigate();
-  const { updateLocation, updateOnboarding } = useUserStore();
+  const { updateLocation, updateOnboarding, updatePermissions } = useUserStore();
   const [step, setStep] = useState<PermissionStep>('initial');
   const [error, setError] = useState<string | null>(null);
 
@@ -27,14 +27,35 @@ export function PermissionsScreen() {
       } catch (err) {
         console.error('Failed to save location:', err);
       }
+      // Persist permission state
+      try {
+        const permissionState = await getLocationPermissionState();
+        await updatePermissions({ location: permissionState });
+      } catch (err) {
+        console.error('Failed to record location permission:', err);
+      }
     } else {
       setStep('location-denied');
       setError(locationResult.error || 'Location access is required to find snacks near you');
+      try {
+        const permissionState = await getLocationPermissionState();
+        await updatePermissions({ location: permissionState });
+      } catch (err) {
+        console.error('Failed to record denied location permission:', err);
+      }
       return;
     }
 
     // Step 2: Request notification permission (non-blocking)
-    await requestNotificationPermission();
+    const notificationResult = await requestNotificationPermission();
+    try {
+      await updatePermissions(
+        { notifications: notificationResult.permissionState },
+        notificationResult.token
+      );
+    } catch (err) {
+      console.error('Failed to record notification permission:', err);
+    }
     // We don't check the result - user can proceed without notifications
 
     // Mark onboarding as complete
@@ -61,8 +82,23 @@ export function PermissionsScreen() {
         console.error('Failed to save location:', err);
       }
 
+      try {
+        const permissionState = await getLocationPermissionState();
+        await updatePermissions({ location: permissionState });
+      } catch (err) {
+        console.error('Failed to record location permission:', err);
+      }
+
       // Request notifications after successful location
-      await requestNotificationPermission();
+      const notificationResult = await requestNotificationPermission();
+      try {
+        await updatePermissions(
+          { notifications: notificationResult.permissionState },
+          notificationResult.token
+        );
+      } catch (err) {
+        console.error('Failed to record notification permission:', err);
+      }
 
       try {
         await updateOnboarding({ completed: true });
@@ -74,6 +110,12 @@ export function PermissionsScreen() {
     } else {
       setStep('location-denied');
       setError(locationResult.error || 'Location access is required');
+      try {
+        const permissionState = await getLocationPermissionState();
+        await updatePermissions({ location: permissionState });
+      } catch (err) {
+        console.error('Failed to record denied location permission:', err);
+      }
     }
   };
 
@@ -81,6 +123,7 @@ export function PermissionsScreen() {
     // Allow user to skip but they won't get full functionality
     try {
       await updateOnboarding({ completed: true });
+      await updatePermissions({ location: 'denied' });
     } catch (err) {
       console.error('Failed to update onboarding:', err);
     }

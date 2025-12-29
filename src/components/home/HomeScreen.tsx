@@ -9,8 +9,17 @@ import { NothingOpenState } from './NothingOpenState';
 import { NotInAreaState } from './NotInAreaState';
 import { useUserStore } from '@/stores/userStore';
 import { requestLocation } from '@/lib/location';
-import { getRecommendationQueue, type PlaceRecommendation } from '@/lib/recommendations';
+import {
+  getRecommendationQueue,
+  getNearestOpenPlace,
+  type PlaceRecommendation,
+} from '@/lib/recommendations';
 import { useTestingStore } from '@/stores/testingStore';
+import { favoritePlace, markPlaceVisited, dismissPlace } from '@/lib/interactions';
+import { getGoogleMapsUrl } from '@/lib/googlePlaces';
+import { DismissModal } from './DismissModal';
+import { CelebrationModal } from './CelebrationModal';
+import type { Place } from '@/types/models';
 
 export function HomeScreen() {
   const navigate = useNavigate();
@@ -23,6 +32,14 @@ export function HomeScreen() {
   const [showSwipeTutorial, setShowSwipeTutorial] = useState(false);
   const [swipeNudgeShown, setSwipeNudgeShown] = useState(false);
   const [buttonTapCount, setButtonTapCount] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [dismissOpen, setDismissOpen] = useState(false);
+  const [pendingMapUrl, setPendingMapUrl] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [visitCount, setVisitCount] = useState(0);
+  const [nextToOpen, setNextToOpen] = useState<{ place: Place; opensIn: string }>();
+  const [previewPlaces, setPreviewPlaces] = useState<Place[]>([]);
 
   // Data state
   const [recommendations, setRecommendations] = useState<PlaceRecommendation[]>([]);
@@ -39,7 +56,8 @@ export function HomeScreen() {
         ? { success: true, coordinates: overrideLocation }
         : await requestLocation();
       if (!locationResult.success || !locationResult.coordinates) {
-        setResultType('not_in_area');
+        setLocationError(locationResult.error || 'Location required to find snacks nearby');
+        setResultType('nothing_open');
         setLoading(false);
         return;
       }
@@ -51,18 +69,43 @@ export function HomeScreen() {
         vegan: false,
         glutenFree: false,
       };
+      const maxDistance = user?.preferences.notificationDistance ?? 0.5;
 
       try {
+        // Determine high-level state
+        const nearest = await getNearestOpenPlace(
+          { latitude, longitude },
+          dietaryFilters,
+          user?.id || '',
+          maxDistance,
+          nowOverride
+        );
+
+        if (nearest.type === 'not_in_area') {
+          setPreviewPlaces(nearest.previewPlaces || []);
+          setResultType('not_in_area');
+          setLoading(false);
+          return;
+        }
+
+        if (nearest.type === 'nothing_open') {
+          if (nearest.nextToOpen) setNextToOpen(nearest.nextToOpen);
+          setResultType('nothing_open');
+          setLoading(false);
+          return;
+        }
+
+        // Minimum delay for anticipation
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
         const recs = await getRecommendationQueue(
           { latitude, longitude },
           dietaryFilters,
           user?.id || '',
           10,
+          maxDistance,
           nowOverride
         );
-
-        // Minimum delay for anticipation
-        await new Promise((resolve) => setTimeout(resolve, 800));
 
         if (recs.length === 0) {
           setResultType('nothing_open');
@@ -111,8 +154,8 @@ export function HomeScreen() {
       !swipeNudgeShown
     ) {
       setSwipeNudgeShown(true);
-      // Show toast
-      alert('Pro tip: Swipe the card! ← → ↑');
+      setToast('Pro tip: Swipe the card! ← → ↑');
+      setTimeout(() => setToast(null), 2500);
       updateOnboarding({ hasSeenSwipeNudge: true });
     }
   }, [buttonTapCount, user, swipeNudgeShown, updateOnboarding]);
@@ -142,22 +185,44 @@ export function HomeScreen() {
   };
 
   const handleSwipeRight = async () => {
-    // Save to favorites - will implement in Phase 5
-    console.log('Saved:', currentRecommendation?.place.name);
+    if (!user || !currentRecommendation) {
+      goToNext();
+      return;
+    }
+    try {
+      await favoritePlace(user.id, currentRecommendation.place.id);
+      setToast('Saved to My Snacks');
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      console.error('Failed to save favorite:', err);
+      setToast('Could not save. Try again.');
+      setTimeout(() => setToast(null), 2500);
+    }
     goToNext();
   };
 
   const handleSwipeUp = async () => {
-    // Mark as visited, trigger celebration, open maps
-    console.log('Going to:', currentRecommendation?.place.name);
+    if (!user || !currentRecommendation) {
+      goToNext();
+      return;
+    }
+    try {
+      const count = await markPlaceVisited(user.id, currentRecommendation.place.id);
+      setVisitCount(count);
+      setShowCelebration(true);
+      setPendingMapUrl(getGoogleMapsUrl(currentRecommendation.place.googlePlaceId));
+    } catch (err) {
+      console.error('Failed to mark visited:', err);
+      setToast('Could not mark visited');
+      setTimeout(() => setToast(null), 2500);
+    }
     goToNext();
   };
 
   const handleGetDirections = async () => {
     // Track button tap
     setButtonTapCount((c) => c + 1);
-    // Mark as visited - will implement in Phase 5
-    console.log('Directions for:', currentRecommendation?.place.name);
+    await handleSwipeUp();
   };
 
   const handleCardTap = () => {
@@ -168,8 +233,7 @@ export function HomeScreen() {
 
   const handleNotForMe = () => {
     setButtonTapCount((c) => c + 1);
-    // Will open dismiss modal in Phase 5
-    goToNext();
+    setDismissOpen(true);
   };
 
   const handleSave = () => {
@@ -177,16 +241,41 @@ export function HomeScreen() {
     handleSwipeRight();
   };
 
+  const handleDismissNever = async () => {
+    if (user && currentRecommendation) {
+      try {
+        await dismissPlace(user.id, currentRecommendation.place.id);
+      } catch (err) {
+        console.error('Failed to dismiss place:', err);
+      }
+    }
+    setDismissOpen(false);
+    goToNext();
+  };
+
+  const handleDismissNotToday = () => {
+    setDismissOpen(false);
+    goToNext();
+  };
+
+  const handleCelebrationDismiss = () => {
+    setShowCelebration(false);
+    if (pendingMapUrl) {
+      window.open(pendingMapUrl, '_blank');
+      setPendingMapUrl(null);
+    }
+  };
+
   return (
     <AppLayout>
       {loading && <LoadingState />}
 
       {!loading && resultType === 'not_in_area' && (
-        <NotInAreaState />
+        <NotInAreaState previewPlaces={previewPlaces} userLocation={overrideLocation || undefined} />
       )}
 
       {!loading && resultType === 'nothing_open' && (
-        <NothingOpenState />
+        <NothingOpenState nextToOpen={nextToOpen} />
       )}
 
       {!loading && resultType === 'all_seen' && (
@@ -241,6 +330,34 @@ export function HomeScreen() {
       {/* Swipe Tutorial */}
       {showSwipeTutorial && (
         <SwipeTutorial onDismiss={handleSwipeTutorialDismiss} />
+      )}
+
+      {/* Dismiss Modal */}
+      {dismissOpen && currentRecommendation && (
+        <DismissModal
+          placeName={currentRecommendation.place.name}
+          onNeverShow={handleDismissNever}
+          onNotToday={handleDismissNotToday}
+          onCancel={() => setDismissOpen(false)}
+        />
+      )}
+
+      {/* Celebration */}
+      {showCelebration && (
+        <CelebrationModal visitCount={visitCount} onDismiss={handleCelebrationDismiss} />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-charcoal text-cream px-4 py-2 rounded-lg shadow-lg z-50">
+          {toast}
+        </div>
+      )}
+
+      {locationError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-paprika text-cream px-4 py-2 rounded-lg shadow-lg z-50">
+          {locationError}
+        </div>
       )}
     </AppLayout>
   );

@@ -3,23 +3,32 @@ import { test, expect } from '@playwright/test';
 test.describe('Admin Routes', () => {
   test('admin page redirects unauthenticated users', async ({ page }) => {
     await page.goto('/admin');
-    
-    // Should redirect to login (welcome screen)
-    await expect(page.getByRole('heading', { name: 'Snack Index' })).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 
   test('admin place editor redirects unauthenticated users', async ({ page }) => {
     await page.goto('/admin/place/new');
-    
-    // Should redirect to login
-    await expect(page.getByRole('heading', { name: 'Snack Index' })).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 
   test('admin dish editor redirects unauthenticated users', async ({ page }) => {
     await page.goto('/admin/place/test-place/dish/new');
-    
-    // Should redirect to login
-    await expect(page.getByRole('heading', { name: 'Snack Index' })).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 });
 

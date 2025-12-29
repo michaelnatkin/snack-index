@@ -8,6 +8,7 @@ export interface User {
   email: string;
   displayName: string;
   photoURL?: string;
+  fcmToken?: string;
   createdAt: Timestamp;
   lastActiveAt: Timestamp;
 
@@ -17,6 +18,7 @@ export interface User {
   stats: UserStats;
   onboarding: OnboardingState;
   interactions: InteractionTracking;
+  permissions: UserPermissions;
   isAdmin: boolean;
 }
 
@@ -61,6 +63,13 @@ export interface InteractionTracking {
   totalSwipes: number;
   totalButtonTaps: number;
 }
+
+export interface UserPermissions {
+  location: PermissionState;
+  notifications: PermissionState;
+}
+
+export type PermissionState = 'granted' | 'denied' | 'prompt' | 'unsupported' | 'default';
 
 /**
  * Place stored in Firestore
@@ -176,6 +185,11 @@ export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
 export const DEFAULT_INTERACTION_TRACKING: InteractionTracking = {
   totalSwipes: 0,
   totalButtonTaps: 0,
+};
+
+export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
+  location: 'prompt',
+  notifications: 'default',
 };
 
 /**

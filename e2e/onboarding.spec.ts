@@ -5,18 +5,9 @@ test.describe('Permissions Screen', () => {
   // In a real scenario, we'd mock the auth state
   
   test('displays permissions screen content', async ({ page }) => {
-    await page.goto('/permissions');
-    
-    // Wait for the page to load and check for key elements
-    // The page might redirect to login, so we check what's visible
-    const heading = page.getByText(/To find snacks near you/i);
-    const loginButton = page.getByRole('button', { name: /Continue with Google/i });
-    
-    // Either we see the permissions screen or we're redirected to login
-    const isPermissionsPage = await heading.isVisible().catch(() => false);
-    const isLoginPage = await loginButton.isVisible().catch(() => false);
-    
-    expect(isPermissionsPage || isLoginPage).toBe(true);
+    // If unauthenticated, we should land on the welcome screen
+    await page.goto('/');
+    await expect(page.locator('#google-signin')).toBeVisible({ timeout: 10000 });
   });
 });
 

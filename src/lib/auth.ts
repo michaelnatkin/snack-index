@@ -24,6 +24,7 @@ import {
   DEFAULT_USER_STATS,
   DEFAULT_ONBOARDING_STATE,
   DEFAULT_INTERACTION_TRACKING,
+  DEFAULT_USER_PERMISSIONS,
 } from '@/types/models';
 
 const googleProvider = new GoogleAuthProvider();
@@ -111,6 +112,7 @@ export async function getOrCreateUserDocument(firebaseUser: FirebaseUser): Promi
     ...(firebaseUser.photoURL ? { photoURL: firebaseUser.photoURL } : {}),
     createdAt: now,
     lastActiveAt: now,
+    permissions: DEFAULT_USER_PERMISSIONS,
     preferences: DEFAULT_USER_PREFERENCES,
     subscription: {
       status: 'trial',

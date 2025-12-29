@@ -193,6 +193,7 @@ export function MySnacksScreen() {
             size="md"
             className="w-full mb-4"
             onClick={handleSurpriseMe}
+            disabled={savedPlaces.length === 0}
           >
             🎲 Surprise Me
           </Button>
@@ -241,13 +242,15 @@ export function MySnacksScreen() {
                 </button>
 
                 {/* Swipe to remove indicator */}
-                <button
-                  onClick={() => handleRemove(item)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-sage hover:text-paprika p-2"
-                  aria-label="Remove"
-                >
-                  ✕
-                </button>
+                {activeTab === 'saved' && (
+                  <button
+                    onClick={() => handleRemove(item)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-sage hover:text-paprika p-2"
+                    aria-label="Remove"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>

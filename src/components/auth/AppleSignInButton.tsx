@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/Button';
 
 interface AppleSignInButtonProps {
   onSignIn: () => Promise<void>;
+  id?: string;
 }
 
-export function AppleSignInButton({ onSignIn }: AppleSignInButtonProps) {
+export function AppleSignInButton({ onSignIn, id }: AppleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +26,7 @@ export function AppleSignInButton({ onSignIn }: AppleSignInButtonProps) {
   return (
     <div className="w-full flex flex-col gap-2">
       <Button
+        id={id}
         variant="secondary"
         size="lg"
         onClick={handleClick}

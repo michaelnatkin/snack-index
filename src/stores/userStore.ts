@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { User, DietaryFilters, LocationData, OnboardingState } from '@/types/models';
+import type { User, DietaryFilters, LocationData, OnboardingState, UserPermissions } from '@/types/models';
 
 interface UserStore {
   user: User | null;
@@ -10,6 +10,7 @@ interface UserStore {
   updateOnboarding: (updates: Partial<OnboardingState>) => Promise<void>;
   updateLocation: (coords: { latitude: number; longitude: number }) => Promise<void>;
   updateDietaryFilters: (filters: DietaryFilters) => Promise<void>;
+  updatePermissions: (permissions: Partial<UserPermissions>, fcmToken?: string | null) => Promise<void>;
 }
 
 export const useUserStore = create<UserStore>((set, get) => ({
@@ -75,6 +76,31 @@ export const useUserStore = create<UserStore>((set, get) => ({
     });
 
     set({ user: { ...user, preferences: newPreferences } });
+  },
+
+  updatePermissions: async (permissions, fcmToken) => {
+    const user = get().user;
+    if (!user) return;
+
+    const nextPermissions = {
+      location: user.permissions?.location ?? 'prompt',
+      notifications: user.permissions?.notifications ?? 'default',
+      ...permissions,
+    };
+
+    await updateDoc(doc(db, 'users', user.id), {
+      permissions: nextPermissions,
+      ...(fcmToken ? { fcmToken } : {}),
+      lastActiveAt: serverTimestamp(),
+    });
+
+    set({
+      user: {
+        ...user,
+        permissions: nextPermissions,
+        ...(fcmToken ? { fcmToken } : {}),
+      },
+    });
   },
 }));
 

@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatDistance } from '@/lib/location';
-import { getGoogleMapsUrl } from '@/lib/googlePlaces';
 import type { PlaceRecommendation } from '@/lib/recommendations';
 
 interface RecommendationCardProps {
@@ -87,7 +86,7 @@ export function RecommendationCard({
       {/* Card */}
       <div
         ref={cardRef}
-        className="bg-surface rounded-2xl shadow-lg overflow-hidden cursor-grab active:cursor-grabbing animate-card-reveal"
+        className="bg-surface rounded-2xl shadow-lg overflow-hidden cursor-grab active:cursor-grabbing animate-card-reveal animate-wobble-once"
         style={{
           transform: `translateX(${offset.x}px) translateY(${offset.y}px) rotate(${offset.x * 0.02}deg)`,
           transition: isDragging ? 'none' : 'transform 0.3s ease-out',
@@ -153,7 +152,6 @@ export function RecommendationCard({
             onClick={(e) => {
               e.stopPropagation();
               onGetDirections();
-              window.open(getGoogleMapsUrl(place.googlePlaceId), '_blank');
             }}
           >
             Get Directions

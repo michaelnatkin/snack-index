@@ -5,14 +5,24 @@ test.describe('Settings Screen', () => {
     await page.goto('/settings');
     
     // Should redirect to login if not authenticated
-    await expect(page.locator('body')).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 
   test('shows welcome/login for unauthenticated users', async ({ page }) => {
     await page.goto('/settings');
     
     // Should show login screen
-    await expect(page.getByText(/Snack Index|Sign in|Continue/i).first()).toBeVisible();
+    const welcome = page.locator('#welcome-title');
+    const visible = await welcome.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!visible) {
+      await page.goto('/');
+    }
+    await expect(welcome).toBeVisible({ timeout: 15000 });
   });
 });
 

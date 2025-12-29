@@ -58,6 +58,7 @@ export async function getNearestOpenPlace(
     heroDish: Dish | null;
     isOpen: boolean;
     closeTime?: string;
+    nextOpenInMinutes?: number | null;
   }> = [];
 
   for (const place of allPlaces) {
@@ -89,10 +90,14 @@ export async function getNearestOpenPlace(
     // Check if open
     let isOpen = true;
     let closeTime: string | undefined;
+    let nextOpenInMinutes: number | null = null;
     try {
       const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
       isOpen = hours.isOpen;
       closeTime = hours.closeTime;
+      if (!hours.isOpen && hours.periods) {
+        nextOpenInMinutes = getMinutesUntilOpenFromPeriods(hours.periods, currentTimeOverride);
+      }
     } catch (err) {
       // If we can't get hours, assume open
       console.warn('Failed to get hours for', place.name, err);
@@ -108,6 +113,7 @@ export async function getNearestOpenPlace(
       heroDish,
       isOpen,
       closeTime,
+      nextOpenInMinutes,
     });
   }
 
@@ -131,16 +137,17 @@ export async function getNearestOpenPlace(
     };
   }
 
-  // All places are closed - find next to open
-  // For MVP, just return the closest closed place
-  const closestClosed = placesWithData.sort((a, b) => a.distance - b.distance)[0];
+  // All places are closed - find next to open with countdown
+  const closestClosed = placesWithData
+    .filter((p) => p.nextOpenInMinutes !== null)
+    .sort((a, b) => (a.nextOpenInMinutes ?? Infinity) - (b.nextOpenInMinutes ?? Infinity))[0];
 
-  if (closestClosed) {
+  if (closestClosed && closestClosed.nextOpenInMinutes !== null) {
     return {
       type: 'nothing_open',
       nextToOpen: {
         place: closestClosed.place,
-        opensIn: 'later today', // In production, calculate actual time
+        opensIn: formatMinutesUntil(closestClosed.nextOpenInMinutes),
       },
     };
   }
@@ -156,6 +163,7 @@ export async function getRecommendationQueue(
   dietaryFilters: DietaryFilters,
   userId: string,
   limit: number = 10,
+  maxDistanceMiles: number = 5,
   currentTimeOverride?: Date
 ): Promise<PlaceRecommendation[]> {
   if (!isInSeattleArea(userLocation)) {
@@ -175,7 +183,7 @@ export async function getRecommendationQueue(
       longitude: place.longitude,
     });
 
-    if (distance > 5) continue;
+    if (distance > maxDistanceMiles) continue;
 
     const allDishes = await getActiveDishesForPlace(place.id);
     const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
@@ -229,6 +237,48 @@ function filterDishesByDietary(dishes: Dish[], filters: DietaryFilters): Dish[] 
 
     return true;
   });
+}
+
+/**
+ * Compute minutes until the place opens based on cached hours.
+ */
+function getMinutesUntilOpenFromPeriods(
+  periods: Array<{ open: { day: number; time: string }; close?: { day: number; time: string } }>,
+  nowOverride?: Date
+): number | null {
+  const now = nowOverride ?? new Date();
+  const nowDay = now.getDay();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Find next opening period starting today or later
+  let bestMinutes: number | null = null;
+  for (let i = 0; i < 7; i++) {
+    const day = (nowDay + i) % 7;
+    const period = periods.find((p) => p.open.day === day);
+    if (!period?.open?.time) continue;
+
+    const [openH, openM] = [
+      parseInt(period.open.time.slice(0, 2), 10),
+      parseInt(period.open.time.slice(2), 10),
+    ];
+    const openMinutes = openH * 60 + openM + i * 24 * 60;
+
+    const candidate = openMinutes - nowMinutes;
+    if (candidate >= 0 && (bestMinutes === null || candidate < bestMinutes)) {
+      bestMinutes = candidate;
+    }
+  }
+
+  return bestMinutes;
+}
+
+function formatMinutesUntil(mins: number): string {
+  if (mins <= 0) return 'soon';
+  if (mins < 60) return `in ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  if (minutes === 0) return `in ${hours} hr${hours === 1 ? '' : 's'}`;
+  return `in ${hours} hr ${minutes} min`;
 }
 
 /**

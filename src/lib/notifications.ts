@@ -44,12 +44,11 @@ export async function requestNotificationPermission(): Promise<NotificationResul
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
-      // In a real app, we'd get the FCM token here
-      // For MVP without Firebase setup, we'll just return success
+      const token = await getFCMToken();
       return {
         success: true,
         permissionState: 'granted',
-        // token would be set from FCM in production
+        token: token || undefined,
       };
     }
 

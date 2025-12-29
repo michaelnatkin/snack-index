@@ -38,12 +38,15 @@ export function WelcomeScreen() {
         </div>
 
         {/* Title */}
-        <h1 className="text-4xl font-bold text-charcoal mb-3 font-display text-center">
+        <h1
+          id="welcome-title"
+          className="text-4xl font-bold text-charcoal mb-3 font-display text-center"
+        >
           Snack Index
         </h1>
 
         {/* Tagline */}
-        <p className="text-lg text-text-muted mb-10 text-center">
+        <p id="welcome-tagline" className="text-lg text-text-muted mb-10 text-center">
           Discover snacks near you
         </p>
 
@@ -69,8 +72,8 @@ export function WelcomeScreen() {
             </>
           ) : (
             <>
-              <GoogleSignInButton onSignIn={handleGoogleSignIn} />
-              <AppleSignInButton onSignIn={handleAppleSignIn} />
+              <GoogleSignInButton id="google-signin" onSignIn={handleGoogleSignIn} />
+              <AppleSignInButton id="apple-signin" onSignIn={handleAppleSignIn} />
               
               {/* Divider */}
               <div className="flex items-center gap-3 py-2">
