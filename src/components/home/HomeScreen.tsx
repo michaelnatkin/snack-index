@@ -69,7 +69,7 @@ export function HomeScreen() {
         vegan: false,
         glutenFree: false,
       };
-      const maxDistance = user?.preferences.notificationDistance ?? 0.5;
+      const maxDistance = user?.preferences.notificationDistance ?? 5;
 
       try {
         // Determine high-level state
@@ -122,8 +122,8 @@ export function HomeScreen() {
     };
 
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overrideLocation, overrideTimeIso]);
+    // Re-run when location override, time override, or user prefs change
+  }, [overrideLocation, overrideTimeIso, user?.preferences.notificationDistance, user?.preferences.dietaryFilters, user?.id]);
 
   // Show dietary sheet on first load
   useEffect(() => {

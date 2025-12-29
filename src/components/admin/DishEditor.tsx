@@ -73,14 +73,24 @@ export function DishEditor() {
     setError(null);
 
     try {
-      const dishData = {
+      const desc = description.trim();
+      const dishData: {
+        placeId: string;
+        name: string;
+        description?: string;
+        isHero: boolean;
+        dietary: DietaryFilters;
+        isActive: boolean;
+      } = {
         placeId,
         name: name.trim(),
-        description: description.trim() || undefined,
         isHero,
         dietary,
         isActive,
       };
+      if (desc) {
+        dishData.description = desc;
+      }
 
       if (isNew) {
         await createDish(dishData);

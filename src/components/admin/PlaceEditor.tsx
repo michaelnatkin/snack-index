@@ -123,16 +123,28 @@ export function PlaceEditor() {
     setError(null);
 
     try {
-      const placeData = {
+      const desc = description.trim();
+      const placeData: {
+        googlePlaceId: string;
+        name: string;
+        address: string;
+        latitude: number;
+        longitude: number;
+        description?: string;
+        isActive: boolean;
+        createdBy: string;
+      } = {
         googlePlaceId,
         name,
         address,
         latitude,
         longitude,
-        description: description || undefined,
         isActive,
         createdBy: user?.id || '',
       };
+      if (desc) {
+        placeData.description = desc;
+      }
 
       if (isNew) {
         const newId = await createPlace(placeData);
