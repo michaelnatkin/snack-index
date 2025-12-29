@@ -33,7 +33,12 @@ import {
   connectFirestoreEmulator,
 } from 'firebase/firestore';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+// Prefer .env.local, fall back to .env
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envPath = fs.existsSync(envLocalPath)
+  ? envLocalPath
+  : path.resolve(process.cwd(), '.env');
+dotenv.config({ path: envPath });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -167,8 +172,7 @@ async function main() {
           address: details.address,
           latitude: details.latitude,
           longitude: details.longitude,
-          description: row.description?.trim() || undefined,
-          imageURL: undefined,
+          ...(row.description?.trim() ? { description: row.description.trim() } : {}),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           createdBy: 'import-script',
