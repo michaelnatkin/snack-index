@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { seedDatabase } from '../../lib/seed';
 import { Button } from '../ui/Button';
 import { useTestingStore } from '@/stores/testingStore';
+import { searchPlaces, getPlaceDetails } from '@/lib/googlePlaces';
 
 export function DevSetup() {
   const { user } = useAuth();
@@ -40,6 +41,46 @@ export function DevSetup() {
   const [tempTime, setTempTime] = useState(initialTempTime);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<{ placeId: string; name: string; address: string }[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const handleSearchPlaces = async () => {
+    setSearchError(null);
+    setSearchLoading(true);
+    try {
+      const results = await searchPlaces(searchTerm.trim());
+      setSearchResults(results);
+    } catch (err) {
+      console.error('Search places failed', err);
+      setSearchError('Search failed. Check API key and try again.');
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleUsePlaceResult = async (placeId: string, label: string) => {
+    setSearchError(null);
+    try {
+      const details = await getPlaceDetails(placeId);
+      if (!details) {
+        setSearchError('Could not load place details.');
+        return;
+      }
+      setTempLat(details.latitude.toString());
+      setTempLng(details.longitude.toString());
+      setTempLabel(label);
+      setOverrideLocation({
+        latitude: details.latitude,
+        longitude: details.longitude,
+        label,
+      });
+    } catch (err) {
+      console.error('Load place details failed', err);
+      setSearchError('Could not set location from place. Try again.');
+    }
+  };
 
   const handleSeed = async () => {
     if (!user) {
@@ -115,6 +156,42 @@ export function DevSetup() {
           </p>
 
           <div className="space-y-3">
+            <div className="border border-butter rounded-lg p-3 bg-cream-50 space-y-3">
+              <p className="text-sm font-medium text-warm-900">Search a place to set fake location</p>
+              <div className="flex gap-2 flex-col sm:flex-row">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Temple Pastries"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSearchPlaces}
+                  disabled={!searchTerm.trim() || searchLoading}
+                >
+                  {searchLoading ? 'Searching...' : 'Search'}
+                </Button>
+              </div>
+              {searchError && <p className="text-sm text-red-600">{searchError}</p>}
+              {searchResults.length > 0 && (
+                <div className="space-y-2">
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.placeId}
+                      type="button"
+                      onClick={() => handleUsePlaceResult(r.placeId, r.name)}
+                      className="w-full text-left px-3 py-2 rounded-lg border border-butter bg-white hover:border-primary"
+                    >
+                      <p className="font-medium text-warm-900">{r.name}</p>
+                      <p className="text-sm text-warm-600">{r.address}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-warm-900 mb-1">Latitude</label>
