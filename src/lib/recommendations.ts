@@ -66,9 +66,8 @@ async function getNearbyActivePlaces(
 
   snapshots.forEach((snap) => {
     snap.docs.forEach((docSnap) => {
-      const data = docSnap.data() as Place;
-      const latitude = (data as Place).latitude;
-      const longitude = (data as Place).longitude;
+      const data = docSnap.data() as Omit<Place, 'id'>;
+      const { latitude, longitude } = data;
       if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
 
       const distanceInMeters = distanceBetween(center, [latitude, longitude]) * 1000;
@@ -76,7 +75,7 @@ async function getNearbyActivePlaces(
 
       if (distanceInMiles <= radiusMiles && !seen.has(docSnap.id)) {
         seen.set(docSnap.id, {
-          place: { id: docSnap.id, ...data } as Place,
+          place: { ...data, id: docSnap.id } as Place,
           distance: distanceInMiles,
         });
       }

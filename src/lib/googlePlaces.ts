@@ -272,24 +272,6 @@ export async function getPlaceHours(placeId: string, currentTimeOverride?: Date)
     // #endregion
     return mockHours;
   }
-
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'pre-fix',
-      hypothesisId: 'H4',
-      location: 'googlePlaces.ts:getPlaceHours',
-      message: 'hours fetch success',
-      data: { placeId, durationMs: Date.now() - start, cached: false },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
-  return hours;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { collection, addDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { geohashForLocation } from 'geofire-common';
 import { createPlace, updatePlace } from './places';
@@ -36,14 +36,14 @@ describe('Places CRUD', () => {
 
   describe('Geohash persistence', () => {
     beforeEach(() => {
-      (collection as unknown as vi.Mock).mockReturnValue('places-col');
-      (doc as unknown as vi.Mock).mockReturnValue('doc-ref');
-      (addDoc as unknown as vi.Mock).mockResolvedValue({ id: 'new-id' });
-      (updateDoc as unknown as vi.Mock).mockResolvedValue(undefined);
-      (getDoc as unknown as vi.Mock).mockResolvedValue({
+      (collection as unknown as Mock).mockReturnValue('places-col');
+      (doc as unknown as Mock).mockReturnValue('doc-ref');
+      (addDoc as unknown as Mock).mockResolvedValue({ id: 'new-id' });
+      (updateDoc as unknown as Mock).mockResolvedValue(undefined);
+      (getDoc as unknown as Mock).mockResolvedValue({
         data: () => ({ latitude: 47.6, longitude: -122.3 }),
       });
-      (geohashForLocation as unknown as vi.Mock).mockReturnValue('mock-hash');
+      (geohashForLocation as unknown as Mock).mockReturnValue('mock-hash');
     });
 
     it('adds a geohash when creating a place', async () => {

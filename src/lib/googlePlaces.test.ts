@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { getGoogleMapsUrl, getGooglePlacePhotoUrl } from './googlePlaces';
 
 const originalEnv = { ...import.meta.env };
