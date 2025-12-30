@@ -1,2 +1,8 @@
-npm run lint && npm run test:run && npm run test:e2e
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+npm run lint || exit 1
+npx tsc --noEmit || exit 1
+npm run test:run || exit 1
+CI=1 npm run test:e2e || exit 1
 
