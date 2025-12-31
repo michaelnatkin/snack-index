@@ -392,9 +392,9 @@ export function HomeScreen() {
             <button
               onClick={handleGoToDetails}
               className="action-button action-button--go"
-              aria-label="Go to details"
+              aria-label="See details"
             >
-              <span className="text-lg font-bold">Go</span>
+              <span className="text-xl">👀</span>
             </button>
           </div>
         </>

@@ -133,14 +133,8 @@ export function RecommendationCard({
 
         <p className="text-base text-white/90 mt-2">
           {formatDistance(distance)} · Open{closeTime ? ` until ${closeTime}` : ''}
+          {displayDish && <> · 🔥 {displayDish.name}</>}
         </p>
-
-        {displayDish && (
-          <div className="card-pill inline-flex mt-3">
-            <span className="text-base">🔥</span>
-            <span className="text-sm font-semibold">Top Pick: {displayDish.name}</span>
-          </div>
-        )}
       </div>
     </div>
   );

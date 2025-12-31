@@ -19,11 +19,10 @@ test.describe('Share Landing Page', () => {
     await page.goto('/s/test-place-id');
     
     // Wait for page to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Should show either the landing page or an error state
-    const hasContent = await page.locator('body').isVisible();
-    expect(hasContent).toBe(true);
+    await expect(page.locator('body')).toBeVisible();
   });
 });
 
