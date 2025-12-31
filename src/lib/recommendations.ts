@@ -86,7 +86,58 @@ async function getNearbyActivePlaces(
 }
 
 /**
+ * Extended recommendation data including hours info for closed places
+ */
+interface PlaceRecommendationWithHours extends PlaceRecommendation {
+  nextOpenInMinutes?: number | null;
+}
+
+/**
+ * Process a single place for getNearestOpenPlace
+ * Returns extended data including next open time for closed places
+ */
+async function processPlaceForNearest(
+  place: Place,
+  distance: number,
+  dietaryFilters: DietaryFilters,
+  currentTimeOverride?: Date
+): Promise<PlaceRecommendationWithHours | null> {
+  // Fetch dishes and hours in parallel
+  const [allDishes, hours] = await Promise.all([
+    getActiveDishesForPlace(place.id),
+    getPlaceHours(place.googlePlaceId, currentTimeOverride).catch(() => ({
+      isOpen: true,
+      closeTime: undefined,
+      periods: undefined,
+    })),
+  ]);
+
+  const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
+  if (matchingDishes.length === 0) return null;
+
+  // Calculate next open time if closed
+  let nextOpenInMinutes: number | null = null;
+  if (!hours.isOpen && hours.periods) {
+    nextOpenInMinutes = getMinutesUntilOpenFromPeriods(hours.periods, currentTimeOverride);
+  }
+
+  // Only fetch hero dish if place has matching dishes
+  const heroDish = await getHeroDishForPlace(place.id);
+
+  return {
+    place,
+    heroDish,
+    dishes: matchingDishes,
+    distance,
+    isOpen: hours.isOpen,
+    closeTime: hours.closeTime,
+    nextOpenInMinutes,
+  };
+}
+
+/**
  * Get the nearest open place matching user preferences
+ * Optimized with parallel processing for faster results
  */
 export async function getNearestOpenPlace(
   userLocation: Coordinates,
@@ -95,275 +146,137 @@ export async function getNearestOpenPlace(
   maxDistanceMiles: number = Infinity,
   currentTimeOverride?: Date
 ): Promise<RecommendationResult> {
-  const functionStart = Date.now();
-  const metrics = {
-    totalPlaces: 0,
-    processedPlaces: 0,
-    dismissedCount: 0,
-    dishMs: 0,
-    hoursMs: 0,
-    heroMs: 0,
-  };
-
   // Check if user is in Seattle area
   if (!isInSeattleArea(userLocation)) {
     const previewPlaces = await getActivePlaces();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'debug-session',
-        runId: 'pre-fix',
-        hypothesisId: 'H1',
-        location: 'recommendations.ts:getNearestOpenPlace',
-        message: 'not in area',
-        data: {
-          totalMs: Date.now() - functionStart,
-          totalPlaces: metrics.totalPlaces,
-          processedPlaces: metrics.processedPlaces,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     return {
       type: 'not_in_area',
       previewPlaces: previewPlaces.slice(0, 6),
     };
   }
 
-  // Get nearby active places using geohash queries
-  let nearbyPlaces = await getNearbyActivePlaces(userLocation, maxDistanceMiles);
-
-  if (nearbyPlaces.length === 0) {
-    const allPlaces = await getActivePlaces();
-    const radiusMiles = resolveSearchRadius(maxDistanceMiles);
-    nearbyPlaces = allPlaces
-      .map((place) => ({
-        place,
-        distance: calculateDistance(userLocation, {
-          latitude: place.latitude,
-          longitude: place.longitude,
-        }),
-      }))
-      .filter(({ distance }) => distance <= radiusMiles)
-      .sort((a, b) => a.distance - b.distance);
-  }
-
-  metrics.totalPlaces = nearbyPlaces.length;
+  // Fetch places and dismissed IDs in parallel
+  const [nearbyPlaces, dismissedPlaceIds] = await Promise.all([
+    getNearbyActivePlaces(userLocation, maxDistanceMiles).then(async (places) => {
+      if (places.length === 0) {
+        const allPlaces = await getActivePlaces();
+        const radiusMiles = resolveSearchRadius(maxDistanceMiles);
+        return allPlaces
+          .map((place) => ({
+            place,
+            distance: calculateDistance(userLocation, {
+              latitude: place.latitude,
+              longitude: place.longitude,
+            }),
+          }))
+          .filter(({ distance }) => distance <= radiusMiles)
+          .sort((a, b) => a.distance - b.distance);
+      }
+      return places;
+    }),
+    getDismissedPlaceIds(userId),
+  ]);
 
   if (nearbyPlaces.length === 0) {
     return { type: 'nothing_open' };
   }
 
-  // Get user's dismissed places
-  const dismissedPlaceIds = await getDismissedPlaceIds(userId);
-  metrics.dismissedCount = dismissedPlaceIds.size;
+  // Filter out dismissed places and those too far
+  const eligiblePlaces = nearbyPlaces.filter(
+    ({ place, distance }) =>
+      !dismissedPlaceIds.has(place.id) && distance <= maxDistanceMiles
+  );
 
-  // Filter and score places
-  let nextClosedCandidate:
-    | {
-        place: Place;
-        nextOpenInMinutes: number;
-        closeTime?: string;
-      }
-    | null = null;
-
-  for (const { place, distance } of nearbyPlaces) {
-    // Skip dismissed places
-    if (dismissedPlaceIds.has(place.id)) {
-      metrics.dismissedCount += 0; // explicit tracking retained for logs
-      continue;
-    }
-
-    // Skip places too far away
-    if (distance > maxDistanceMiles) {
-      continue;
-    }
-
-    // Get dishes that match dietary filters
-    const dishStart = Date.now();
-    const allDishes = await getActiveDishesForPlace(place.id);
-    const dishDuration = Date.now() - dishStart;
-    metrics.dishMs += dishDuration;
-    const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
-
-    // Skip places with no matching dishes
-    if (matchingDishes.length === 0) {
-      continue;
-    }
-
-    // Check if open
-    let isOpen = true;
-    let closeTime: string | undefined;
-    let nextOpenInMinutes: number | null = null;
-    let hoursDuration: number | null = null;
-    try {
-      const hoursStart = Date.now();
-      const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
-      hoursDuration = Date.now() - hoursStart;
-      metrics.hoursMs += hoursDuration;
-      isOpen = hours.isOpen;
-      closeTime = hours.closeTime;
-      if (!hours.isOpen && hours.periods) {
-        nextOpenInMinutes = getMinutesUntilOpenFromPeriods(hours.periods, currentTimeOverride);
-      }
-    } catch (err) {
-      // If we can't get hours, assume open
-      console.warn('Failed to get hours for', place.name, err);
-    }
-
-    // Get hero dish
-    const heroStart = Date.now();
-    const heroDish = await getHeroDishForPlace(place.id);
-    const heroDuration = Date.now() - heroStart;
-    metrics.heroMs += heroDuration;
-
-    metrics.processedPlaces += 1;
-
-    if (metrics.processedPlaces <= 5) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: 'debug-session',
-          runId: 'pre-fix',
-          hypothesisId: 'H5',
-          location: 'recommendations.ts:getNearestOpenPlace',
-          message: 'per-place timings',
-          data: {
-            placeId: place.id,
-            distance,
-            dishMs: dishDuration,
-            hoursMs: hoursDuration,
-            heroMs: heroDuration,
-            isOpen,
-            matchingDishes: matchingDishes.length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    }
-
-    if (isOpen) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: 'debug-session',
-          runId: 'pre-fix',
-          hypothesisId: 'H1',
-          location: 'recommendations.ts:getNearestOpenPlace',
-          message: 'returning open recommendation',
-          data: {
-            totalMs: Date.now() - functionStart,
-            totalPlaces: metrics.totalPlaces,
-            processedPlaces: metrics.processedPlaces,
-            dismissedCount: metrics.dismissedCount,
-            dishMs: metrics.dishMs,
-            hoursMs: metrics.hoursMs,
-            heroMs: metrics.heroMs,
-            openCount: metrics.processedPlaces, // processed until first open
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-
-      return {
-        type: 'recommendation',
-        recommendation: {
-          place,
-          heroDish,
-          dishes: matchingDishes,
-          distance,
-          isOpen,
-          closeTime,
-        },
-      };
-    }
-
-    // Track earliest next opening only if we still have no open places
-    if (nextOpenInMinutes !== null) {
-      if (!nextClosedCandidate || nextOpenInMinutes < nextClosedCandidate.nextOpenInMinutes) {
-        nextClosedCandidate = {
-          place,
-          nextOpenInMinutes,
-          closeTime,
-        };
-      }
-    }
+  if (eligiblePlaces.length === 0) {
+    return { type: 'all_seen' };
   }
 
-  // All places are closed - find next to open with countdown
-  if (nextClosedCandidate) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'debug-session',
-        runId: 'pre-fix',
-        hypothesisId: 'H1',
-        location: 'recommendations.ts:getNearestOpenPlace',
-        message: 'all closed; next to open',
-        data: {
-          totalMs: Date.now() - functionStart,
-          totalPlaces: metrics.totalPlaces,
-          processedPlaces: metrics.processedPlaces,
-          dismissedCount: metrics.dismissedCount,
-          dishMs: metrics.dishMs,
-          hoursMs: metrics.hoursMs,
-          heroMs: metrics.heroMs,
-          candidate: nextClosedCandidate.place.name,
-          opensInMinutes: nextClosedCandidate.nextOpenInMinutes,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+  // Process first batch of places in parallel (check closest ones first)
+  const batchSize = Math.min(eligiblePlaces.length, 10);
+  const batch = eligiblePlaces.slice(0, batchSize);
+
+  const results = await Promise.all(
+    batch.map(({ place, distance }) =>
+      processPlaceForNearest(place, distance, dietaryFilters, currentTimeOverride)
+    )
+  );
+
+  // Find first open place (already sorted by distance)
+  const openPlace = results.find((r) => r !== null && r.isOpen);
+  if (openPlace) {
     return {
-      type: 'nothing_open',
-      nextToOpen: {
-        place: nextClosedCandidate.place,
-        opensIn: formatMinutesUntil(nextClosedCandidate.nextOpenInMinutes),
+      type: 'recommendation',
+      recommendation: {
+        place: openPlace.place,
+        heroDish: openPlace.heroDish,
+        dishes: openPlace.dishes,
+        distance: openPlace.distance,
+        isOpen: openPlace.isOpen,
+        closeTime: openPlace.closeTime,
       },
     };
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'pre-fix',
-      hypothesisId: 'H1',
-      location: 'recommendations.ts:getNearestOpenPlace',
-      message: 'nearestOpen aggregation',
-      data: {
-        totalMs: Date.now() - functionStart,
-        totalPlaces: metrics.totalPlaces,
-        processedPlaces: metrics.processedPlaces,
-        dismissedCount: metrics.dismissedCount,
-        dishMs: metrics.dishMs,
-        hoursMs: metrics.hoursMs,
-        heroMs: metrics.heroMs,
+  // No open places - find the one opening soonest
+  const closedWithTimes = results.filter(
+    (r): r is PlaceRecommendationWithHours =>
+      r !== null && !r.isOpen && r.nextOpenInMinutes !== null
+  );
+
+  if (closedWithTimes.length > 0) {
+    const soonest = closedWithTimes.reduce((a, b) =>
+      (a.nextOpenInMinutes ?? Infinity) < (b.nextOpenInMinutes ?? Infinity) ? a : b
+    );
+    return {
+      type: 'nothing_open',
+      nextToOpen: {
+        place: soonest.place,
+        opensIn: formatMinutesUntil(soonest.nextOpenInMinutes ?? 0),
       },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
+    };
+  }
 
   return { type: 'all_seen' };
 }
 
 /**
+ * Process a single place to get recommendation data
+ * Returns null if place doesn't qualify (no matching dishes, closed, etc.)
+ */
+async function processPlaceForRecommendation(
+  place: Place,
+  distance: number,
+  dietaryFilters: DietaryFilters,
+  currentTimeOverride?: Date
+): Promise<PlaceRecommendation | null> {
+  // Fetch dishes and hours in parallel
+  const [allDishes, hours] = await Promise.all([
+    getActiveDishesForPlace(place.id),
+    getPlaceHours(place.googlePlaceId, currentTimeOverride).catch(() => ({ isOpen: true, closeTime: undefined })),
+  ]);
+
+  const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
+  if (matchingDishes.length === 0) return null;
+
+  const isOpen = hours.isOpen;
+  if (!isOpen) return null;
+
+  // Only fetch hero dish if we're going to use this place
+  const heroDish = await getHeroDishForPlace(place.id);
+
+  return {
+    place,
+    heroDish,
+    dishes: matchingDishes,
+    distance,
+    isOpen,
+    closeTime: hours.closeTime,
+  };
+}
+
+/**
  * Get queue of recommendations (for swiping through)
+ * Optimized with parallel processing for faster results
  */
 export async function getRecommendationQueue(
   userLocation: Coordinates,
@@ -373,113 +286,55 @@ export async function getRecommendationQueue(
   maxDistanceMiles: number = Infinity,
   currentTimeOverride?: Date
 ): Promise<PlaceRecommendation[]> {
-  const functionStart = Date.now();
-  const metrics = {
-    totalPlaces: 0,
-    processedPlaces: 0,
-    dismissedCount: 0,
-    dishMs: 0,
-    hoursMs: 0,
-    heroMs: 0,
-  };
-
   if (!isInSeattleArea(userLocation)) {
     return [];
   }
 
-  let placesWithDistance = await getNearbyActivePlaces(userLocation, maxDistanceMiles);
+  // Fetch places and dismissed IDs in parallel
+  const [placesWithDistance, dismissedPlaceIds] = await Promise.all([
+    getNearbyActivePlaces(userLocation, maxDistanceMiles).then(async (places) => {
+      if (places.length === 0) {
+        const allPlaces = await getActivePlaces();
+        const radiusMiles = resolveSearchRadius(maxDistanceMiles);
+        return allPlaces
+          .map((place) => ({
+            place,
+            distance: calculateDistance(userLocation, {
+              latitude: place.latitude,
+              longitude: place.longitude,
+            }),
+          }))
+          .filter(({ distance }) => distance <= radiusMiles)
+          .sort((a, b) => a.distance - b.distance);
+      }
+      return places;
+    }),
+    getDismissedPlaceIds(userId),
+  ]);
 
-  if (placesWithDistance.length === 0) {
-    const allPlaces = await getActivePlaces();
-    const radiusMiles = resolveSearchRadius(maxDistanceMiles);
-    placesWithDistance = allPlaces
-      .map((place) => ({
-        place,
-        distance: calculateDistance(userLocation, {
-          latitude: place.latitude,
-          longitude: place.longitude,
-        }),
-      }))
-      .filter(({ distance }) => distance <= radiusMiles)
-      .sort((a, b) => a.distance - b.distance);
-  }
+  // Filter out dismissed places
+  const eligiblePlaces = placesWithDistance.filter(
+    ({ place }) => !dismissedPlaceIds.has(place.id)
+  );
 
-  metrics.totalPlaces = placesWithDistance.length;
-  const dismissedPlaceIds = await getDismissedPlaceIds(userId);
-  metrics.dismissedCount = dismissedPlaceIds.size;
+  // Process places in parallel batches for speed
+  // Take more than we need since some will be filtered out
+  const batchSize = Math.min(eligiblePlaces.length, limit * 2);
+  const batch = eligiblePlaces.slice(0, batchSize);
 
-  const recommendations: PlaceRecommendation[] = [];
+  const results = await Promise.all(
+    batch.map(({ place, distance }) =>
+      processPlaceForRecommendation(place, distance, dietaryFilters, currentTimeOverride)
+    )
+  );
 
-  for (const { place, distance } of placesWithDistance) {
-    if (dismissedPlaceIds.has(place.id)) continue;
-
-    const dishStart = Date.now();
-    const allDishes = await getActiveDishesForPlace(place.id);
-    metrics.dishMs += Date.now() - dishStart;
-    const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
-
-    if (matchingDishes.length === 0) continue;
-
-    let isOpen = true;
-    let closeTime: string | undefined;
-    try {
-      const hoursStart = Date.now();
-      const hours = await getPlaceHours(place.googlePlaceId, currentTimeOverride);
-      metrics.hoursMs += Date.now() - hoursStart;
-      isOpen = hours.isOpen;
-      closeTime = hours.closeTime;
-    } catch {
-      // Assume open if we can't check
-    }
-
-    if (!isOpen) continue;
-
-    const heroStart = Date.now();
-    const heroDish = await getHeroDishForPlace(place.id);
-    metrics.heroMs += Date.now() - heroStart;
-
-    recommendations.push({
-      place,
-      heroDish,
-      dishes: matchingDishes,
-      distance,
-      isOpen,
-      closeTime,
-    });
-    metrics.processedPlaces += 1;
-
-    if (recommendations.length >= limit) break;
-  }
+  // Filter out nulls and take the limit
+  const recommendations = results
+    .filter((r): r is PlaceRecommendation => r !== null)
+    .slice(0, limit);
 
   // Sort by distance
-  const sorted = recommendations.sort((a, b) => a.distance - b.distance);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'pre-fix',
-      hypothesisId: 'H2',
-      location: 'recommendations.ts:getRecommendationQueue',
-      message: 'queue aggregation',
-      data: {
-        totalMs: Date.now() - functionStart,
-        totalPlaces: metrics.totalPlaces,
-        processedPlaces: metrics.processedPlaces,
-        dismissedCount: metrics.dismissedCount,
-        dishMs: metrics.dishMs,
-        hoursMs: metrics.hoursMs,
-        heroMs: metrics.heroMs,
-        returned: sorted.length,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
-  return sorted;
+  return recommendations.sort((a, b) => a.distance - b.distance);
 }
 
 /**

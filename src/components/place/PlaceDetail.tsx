@@ -172,97 +172,94 @@ export function PlaceDetail() {
 
   return (
     <AppLayout hideNav>
-      {/* Header */}
-      <header className="bg-surface border-b border-butter/30 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-[42rem] mx-auto flex items-center justify-between">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-2xl"
-            aria-label="Back"
-          >
-            ←
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={handleShare}
-            className="text-xl p-2"
-            aria-label="Share"
-          >
-            ↗️
-          </button>
-        </div>
-      </header>
-
       <div className="max-w-[42rem] mx-auto">
-        {/* Hero Image */}
-        <div className="h-48 bg-gradient-to-br from-honey via-paprika to-eggplant flex items-center justify-center">
+        <div className="relative h-[22.5rem] rounded-b-[2rem] overflow-hidden shadow-xl bg-gradient-to-br from-honey via-paprika to-eggplant">
           {place.imageURL || photoUrl ? (
             <img
               src={place.imageURL || photoUrl || ''}
               alt={place.name}
-              className="w-full h-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            <span className="text-6xl">🍽️</span>
+            <div className="absolute inset-0 flex items-center justify-center text-6xl">🍽️</div>
           )}
+          <div className="hero-card__overlay" />
+
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+            <button
+              onClick={() => navigate(-1)}
+              className="glass-button text-xl"
+              style={{ width: '3rem', height: '3rem' }}
+              aria-label="Back"
+            >
+              ←
+            </button>
+            <button
+              onClick={handleShare}
+              className="glass-button text-lg"
+              style={{ width: '3rem', height: '3rem' }}
+              aria-label="Share"
+            >
+              ↗️
+            </button>
+          </div>
+
+          <div className="absolute bottom-6 left-6 right-6 text-white drop-shadow-lg space-y-2">
+            <h1 className="text-3xl font-bold font-display leading-tight">
+              {place.name}
+            </h1>
+            <p className="text-white/85 text-sm">
+              {distance !== undefined && `${formatDistance(distance)} · `}
+              {place.address.split(',')[0]}
+            </p>
+            <p className="text-sm">
+              {isOpen ? `Open${closeTime ? ` until ${closeTime}` : ''}` : 'Closed'}
+            </p>
+          </div>
         </div>
 
-        <div className="px-6 py-6">
-          {/* Place Info */}
-          <h1 className="text-3xl font-bold text-charcoal font-display mb-2">
-            {place.name}
-          </h1>
-          <p className="text-text-muted mb-1">
-            {distance !== undefined && `${formatDistance(distance)} · `}
-            {place.address.split(',')[0]}
-          </p>
-          <p className={isOpen ? 'text-success' : 'text-paprika'}>
-            {isOpen ? `Open${closeTime ? ` until ${closeTime}` : ''}` : 'Closed'}
-          </p>
-
+        <div className="px-6 py-6 space-y-6">
           {place.description && (
-            <p className="text-text-muted mt-3">{place.description}</p>
+            <div className="glass-panel p-5">
+              <p className="text-text-muted">{place.description}</p>
+            </div>
           )}
 
-          {/* Hero Dish */}
           {heroDish && (
-            <div className="mt-6">
+            <div className="glass-panel p-5">
               <h2 className="text-sm font-semibold text-sage uppercase tracking-wide mb-3">
                 ⭐ THE MOVE
               </h2>
-              <div className="bg-surface rounded-xl p-4 shadow-sm border border-butter/30">
-                <h3 className="text-xl font-semibold text-charcoal">
-                  {heroDish.name}
-                </h3>
-                {heroDish.description && (
-                  <p className="text-text-muted mt-1">{heroDish.description}</p>
+              <h3 className="text-xl font-semibold text-charcoal">
+                {heroDish.name}
+              </h3>
+              {heroDish.description && (
+                <p className="text-text-muted mt-1">{heroDish.description}</p>
+              )}
+              <div className="flex gap-2 mt-3">
+                {heroDish.dietary.vegetarian && (
+                  <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded">VEG</span>
                 )}
-                <div className="flex gap-2 mt-2">
-                  {heroDish.dietary.vegetarian && (
-                    <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded">VEG</span>
-                  )}
-                  {heroDish.dietary.vegan && (
-                    <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded">V</span>
-                  )}
-                  {heroDish.dietary.glutenFree && (
-                    <span className="text-xs bg-honey/20 text-honey px-2 py-0.5 rounded">GF</span>
-                  )}
-                </div>
+                {heroDish.dietary.vegan && (
+                  <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded">V</span>
+                )}
+                {heroDish.dietary.glutenFree && (
+                  <span className="text-xs bg-honey/20 text-honey px-2 py-0.5 rounded">GF</span>
+                )}
               </div>
             </div>
           )}
 
-          {/* Other Dishes */}
           {filteredOtherDishes.length > 0 && (
-            <div className="mt-6">
+            <div className="glass-panel p-5">
               <h2 className="text-sm font-semibold text-sage uppercase tracking-wide mb-3">
                 Also good
               </h2>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {filteredOtherDishes.map((dish) => (
                   <div
                     key={dish.id}
-                    className="bg-surface rounded-lg p-3 shadow-sm border border-butter/30"
+                    className="rounded-lg border border-butter/40 bg-white/80 px-3 py-2 shadow-sm"
                   >
                     <h3 className="font-medium text-charcoal">{dish.name}</h3>
                     <div className="flex gap-2 mt-1">
@@ -282,8 +279,7 @@ export function PlaceDetail() {
             </div>
           )}
 
-          {/* Get Directions Button */}
-          <div className="mt-8 mb-4">
+          <div className="glass-panel p-5">
             <Button
               size="lg"
               className="w-full"

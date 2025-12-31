@@ -1,5 +1,23 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach, type Mock } from 'vitest';
 import { getGoogleMapsUrl, getGooglePlacePhotoUrl } from './googlePlaces';
+
+// Mock the cache module
+vi.mock('./cache', () => ({
+  getCached: vi.fn(),
+  getCacheKey: vi.fn((type: string, id: string, suffix?: string) => 
+    suffix ? `${type}:${id}:${suffix}` : `${type}:${id}`
+  ),
+  CACHE_TTL: {
+    PLACE_HOURS: 24 * 60 * 60 * 1000,
+    PLACE_DETAILS: 7 * 24 * 60 * 60 * 1000,
+    PLACE_PHOTO: 24 * 60 * 60 * 1000,
+    LOCAL_HOURS: 24 * 60 * 60 * 1000,
+    LOCAL_DETAILS: 7 * 24 * 60 * 60 * 1000,
+    LOCAL_PHOTO: 24 * 60 * 60 * 1000,
+  },
+}));
+
+import { getCached } from './cache';
 
 const originalEnv = { ...import.meta.env };
 
@@ -29,21 +47,48 @@ describe('getGoogleMapsUrl', () => {
 });
 
 describe('getGooglePlacePhotoUrl', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     Object.assign(import.meta.env, originalEnv);
   });
 
-  it('returns null when API key is missing', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('returns null when API key is missing and cache returns null', async () => {
+    // Mock cache to call the fetcher (simulating cache miss)
+    (getCached as unknown as Mock).mockImplementation(
+      async (_key: string, _type: string, _id: string, _ttl1: number, _ttl2: number, fetcher: () => Promise<unknown>) => {
+        return fetcher();
+      }
+    );
+
     Object.assign(import.meta.env, { VITE_GOOGLE_PLACES_API_KEY: undefined });
     const url = await getGooglePlacePhotoUrl('abc123');
     expect(url).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('fetches photo url and caches by place + width', async () => {
+  it('returns cached photo url from cache layer', async () => {
+    const cachedPhotoUrl = 'https://places.googleapis.com/v1/places/abc123/photos/photo-1/media?maxWidthPx=600&key=test-key';
+    
+    // Mock cache to return cached data
+    (getCached as unknown as Mock).mockResolvedValue({ photoUrl: cachedPhotoUrl });
+
+    const url = await getGooglePlacePhotoUrl('abc123', 600);
+    expect(url).toBe(cachedPhotoUrl);
+    expect(getCached).toHaveBeenCalledTimes(1);
+    expect(getCached).toHaveBeenCalledWith(
+      'photo:abc123:600',
+      'photo',
+      'abc123',
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Function)
+    );
+  });
+
+  it('fetches photo url when cache misses', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ photos: [{ name: 'places/abc123/photos/photo-1' }] }),
@@ -53,15 +98,17 @@ describe('getGooglePlacePhotoUrl', () => {
     vi.stubGlobal('fetch', fetchMock);
     Object.assign(import.meta.env, { VITE_GOOGLE_PLACES_API_KEY: 'test-key' });
 
-    const url1 = await getGooglePlacePhotoUrl('abc123', 600);
-    expect(url1).toBe(
+    // Mock cache to call the fetcher (simulating cache miss)
+    (getCached as unknown as Mock).mockImplementation(
+      async (_key: string, _type: string, _id: string, _ttl1: number, _ttl2: number, fetcher: () => Promise<unknown>) => {
+        return fetcher();
+      }
+    );
+
+    const url = await getGooglePlacePhotoUrl('abc123', 600);
+    expect(url).toBe(
       'https://places.googleapis.com/v1/places/abc123/photos/photo-1/media?maxWidthPx=600&key=test-key'
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    const url2 = await getGooglePlacePhotoUrl('abc123', 600);
-    expect(url2).toBe(url1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
-

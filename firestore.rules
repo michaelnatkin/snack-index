@@ -72,6 +72,12 @@ service cloud.firestore {
       allow read: if isAdmin();
       // Write will be done via Cloud Functions
     }
+
+    // Places cache - shared cache for Google Places API responses
+    match /placesCache/{cacheId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
   }
 }
 

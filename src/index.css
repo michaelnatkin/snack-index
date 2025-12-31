@@ -7,25 +7,27 @@
 /* Using a warm, food-inspired palette with distinctive typography */
 
 @theme {
-  /* Colors - warm, appetizing palette */
-  --color-cream: #faf7f2;
-  --color-butter: #f5e6c8;
-  --color-honey: #e8a838;
-  --color-paprika: #c44536;
-  --color-eggplant: #2d1b2e;
-  --color-charcoal: #1a1a1a;
-  --color-sage: #7d8471;
-  --color-olive: #4a5043;
+  /* Colors - bright, airy palette inspired by sunlit cafes */
+  --color-cream: #f8f7f4;
+  --color-butter: #f1e7d8;
+  --color-honey: #ffb17a;
+  --color-paprika: #ea6c5f;
+  --color-eggplant: #2b1e3b;
+  --color-charcoal: #16171b;
+  --color-sage: #7a8b81;
+  --color-olive: #3f4f46;
+  --color-mist: #edf1f7;
+  --color-sand: #f6efe7;
   
   /* Semantic colors */
   --color-primary: var(--color-honey);
-  --color-primary-dark: #c4901f;
-  --color-secondary: var(--color-paprika);
-  --color-background: var(--color-cream);
+  --color-primary-dark: #f38c4a;
+  --color-secondary: #64bfa4;
+  --color-background: var(--color-mist);
   --color-surface: #ffffff;
   --color-text: var(--color-charcoal);
-  --color-text-muted: var(--color-sage);
-  --color-success: #5a8f5a;
+  --color-text-muted: #5c6673;
+  --color-success: #4fa77c;
   --color-error: var(--color-paprika);
 
   /* Typography - distinctive, not Inter/Roboto */
@@ -50,6 +52,7 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 40px -8px rgb(15 23 42 / 0.18), 0 10px 25px -10px rgb(15 23 42 / 0.12);
 }
 
 /* Base styles */
@@ -70,6 +73,10 @@ body {
 #root {
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+body {
+  background: var(--color-background);
 }
 
 /* Headings use display font */
@@ -214,4 +221,120 @@ h1, h2, h3, h4, h5, h6 {
 
 .animate-bounce-in {
   animation: bounce-in 0.4s ease-out forwards;
+}
+
+/* Shell + surface styling */
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(255, 200, 170, 0.22), transparent 35%),
+    radial-gradient(circle at 90% 10%, rgba(100, 191, 164, 0.16), transparent 30%),
+    linear-gradient(180deg, #f8f7f4 0%, #f3f6fb 100%);
+}
+
+.shell-inner {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 0;
+}
+
+.glass-panel {
+  background: rgb(255 255 255 / 0.74);
+  border: 1px solid rgb(255 255 255 / 0.55);
+  box-shadow: var(--shadow-xl);
+  border-radius: 1.5rem;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.floating-nav {
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.8);
+}
+
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.75rem;
+  box-shadow: var(--shadow-xl);
+  background: linear-gradient(135deg, #f7cab1, #9cd7c6);
+}
+
+.hero-card img {
+  transition: transform 0.6s ease;
+}
+
+.hero-card:hover img {
+  transform: scale(1.03);
+}
+
+.hero-card__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.05) 0%, rgb(0 0 0 / 0.65) 100%);
+}
+
+.hero-card__content {
+  position: absolute;
+  inset: 0;
+  padding: 1.5rem 1.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: #f9fbff;
+  text-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
+}
+
+.hero-card__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.88);
+  color: var(--color-charcoal);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.22);
+  max-width: 80%;
+  width: fit-content;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.86);
+  color: var(--color-charcoal);
+  box-shadow: 0 10px 25px rgb(0 0 0 / 0.12);
+}
+
+.glass-button {
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 0.82);
+  border: 1px solid rgb(255 255 255 / 0.65);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-button:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: var(--shadow-md);
 }

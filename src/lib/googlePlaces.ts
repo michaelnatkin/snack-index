@@ -3,9 +3,13 @@
  * 
  * Uses the Google Places API (New) HTTP endpoints.
  * Falls back to mock data when no API key is provided.
+ * 
+ * Caching: Uses two-tier cache (Firestore + localStorage) for API responses
+ * to reduce costs and improve performance across all users.
  */
 
 import type { Coordinates } from './location';
+import { getCached, getCacheKey, CACHE_TTL } from './cache';
 
 export interface PlaceAutocompleteResult {
   placeId: string;
@@ -30,14 +34,9 @@ export interface PlaceHours {
   }>;
 }
 
-// Cache for place hours (15 minute TTL)
-const hoursCache = new Map<string, { hours: PlaceHours; timestamp: number }>();
-const HOURS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
-
 const API_BASE = 'https://places.googleapis.com/v1';
 const DEFAULT_LOCATION = { latitude: 47.6062, longitude: -122.3321 }; // Seattle
 const DEFAULT_RADIUS_METERS = 50_000;
-const photoUrlCache = new Map<string, string>();
 
 /**
  * Search for places by name (autocomplete)
@@ -94,183 +93,206 @@ export async function searchPlaces(
   }
 }
 
+interface CachedDetailsData {
+  details: PlaceDetails | null;
+}
+
 /**
- * Get detailed place information
+ * Fetch place details from Google Places API (used by cache)
  */
-export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+async function fetchPlaceDetailsFromApi(placeId: string): Promise<CachedDetailsData> {
   const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
     console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; using mock data');
-    return getMockPlaceDetails(placeId);
+    return { details: getMockPlaceDetails(placeId) };
   }
 
-  try {
-    const fieldMask = 'id,displayName,formattedAddress,location,regularOpeningHours,currentOpeningHours';
-    const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
-      headers: {
-        'X-Goog-Api-Key': apiKey,
-      },
-    });
+  const fieldMask = 'id,displayName,formattedAddress,location,regularOpeningHours,currentOpeningHours';
+  const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
+    headers: {
+      'X-Goog-Api-Key': apiKey,
+    },
+  });
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Place details failed: ${res.status} ${text}`);
-    }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Place details failed: ${res.status} ${text}`);
+  }
 
-    const place = await res.json();
-    if (!place?.id || !place?.displayName?.text || !place?.formattedAddress || !place?.location) {
-      return null;
-    }
+  const place = await res.json();
+  if (!place?.id || !place?.displayName?.text || !place?.formattedAddress || !place?.location) {
+    return { details: null };
+  }
 
-    return {
+  return {
+    details: {
       placeId: place.id,
       name: place.displayName.text,
       address: place.formattedAddress,
       latitude: place.location.latitude ?? DEFAULT_LOCATION.latitude,
       longitude: place.location.longitude ?? DEFAULT_LOCATION.longitude,
-    };
+    },
+  };
+}
+
+/**
+ * Get detailed place information
+ * Uses two-tier cache (Firestore + localStorage) for API responses
+ */
+export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+  try {
+    const cacheKey = getCacheKey('details', placeId);
+
+    const cachedData = await getCached<CachedDetailsData>(
+      cacheKey,
+      'details',
+      placeId,
+      CACHE_TTL.PLACE_DETAILS,
+      CACHE_TTL.LOCAL_DETAILS,
+      () => fetchPlaceDetailsFromApi(placeId)
+    );
+
+    return cachedData.details;
   } catch (err) {
     console.error('Place details error:', err);
     return getMockPlaceDetails(placeId);
   }
 }
 
+type ParsedPeriod = { open: { day: number; time: string }; close?: { day: number; time: string } };
+
 /**
- * Check if a place is currently open
+ * Raw hours data from the API (cached in Firestore)
  */
-export async function getPlaceHours(placeId: string, currentTimeOverride?: Date): Promise<PlaceHours> {
-  const start = Date.now();
+interface CachedHoursData {
+  openNow: boolean;
+  periods: ParsedPeriod[];
+}
 
-  // Check cache first
-  const cached = hoursCache.get(placeId);
-  if (cached && Date.now() - cached.timestamp < HOURS_CACHE_TTL) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'debug-session',
-        runId: 'pre-fix',
-        hypothesisId: 'H4',
-        location: 'googlePlaces.ts:getPlaceHours',
-        message: 'hours cache hit',
-        data: { placeId, ageMs: Date.now() - cached.timestamp, durationMs: Date.now() - start },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return cached.hours;
-  }
-
+/**
+ * Fetch raw hours data from Google Places API (used by cache)
+ */
+async function fetchPlaceHoursFromApi(placeId: string): Promise<CachedHoursData> {
   const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
     console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; using mock data');
-    const mockHours = getMockPlaceHours();
-    hoursCache.set(placeId, { hours: mockHours, timestamp: Date.now() });
-    return mockHours;
+    return { openNow: true, periods: getMockPlaceHours().periods || [] };
   }
 
-  try {
-    const fieldMask = 'currentOpeningHours';
-    const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
-      headers: {
-        'X-Goog-Api-Key': apiKey,
+  const fieldMask = 'currentOpeningHours';
+  const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
+    headers: {
+      'X-Goog-Api-Key': apiKey,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Place hours failed: ${res.status} ${text}`);
+  }
+
+  const place = await res.json();
+  const hoursData = place.currentOpeningHours;
+
+  const periods: ParsedPeriod[] =
+    hoursData?.periods?.map((p: { open?: { day?: number; hourMinute?: string; hour?: number; minute?: number }; close?: { day?: number; hourMinute?: string; hour?: number; minute?: number } }) => ({
+      open: {
+        day: p.open?.day ?? 0,
+        time: p.open?.hourMinute ?? (p.open?.hour !== undefined && p.open?.minute !== undefined
+          ? `${String(p.open.hour).padStart(2, '0')}${String(p.open.minute).padStart(2, '0')}`
+          : '0000'),
       },
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Place hours failed: ${res.status} ${text}`);
-    }
-
-    const place = await res.json();
-    const hoursData = place.currentOpeningHours;
-
-    type ParsedPeriod = { open: { day: number; time: string }; close?: { day: number; time: string } };
-    const periods: ParsedPeriod[] =
-      hoursData?.periods?.map((p: { open?: { day?: number; hourMinute?: string; hour?: number; minute?: number }; close?: { day?: number; hourMinute?: string; hour?: number; minute?: number } }) => ({
-        open: {
-          day: p.open?.day ?? 0,
-          time: p.open?.hourMinute ?? (p.open?.hour !== undefined && p.open?.minute !== undefined
-            ? `${String(p.open.hour).padStart(2, '0')}${String(p.open.minute).padStart(2, '0')}`
-            : '0000'),
-        },
-        close: p.close
-          ? {
-              day: p.close.day ?? 0,
-              time:
-                p.close.hourMinute ??
-                (p.close.hour !== undefined && p.close.minute !== undefined
-                  ? `${String(p.close.hour).padStart(2, '0')}${String(p.close.minute).padStart(2, '0')}`
-                  : '0000'),
-            }
-          : undefined,
-      })) || [];
-
-    const hours: PlaceHours = {
-      isOpen: hoursData?.openNow ?? true,
-      periods,
-    };
-
-    // Recompute isOpen if admin provided a fake "now"
-    if (currentTimeOverride && periods.length > 0) {
-      const now = currentTimeOverride;
-      const day = now.getDay();
-      const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-      const todayPeriod = periods.find((p: ParsedPeriod) => p.open.day === day);
-      if (todayPeriod?.open?.time) {
-        const openTime = todayPeriod.open.time;
-        const closeTime = todayPeriod.close?.time;
-        const openInt = parseInt(openTime, 10);
-        const closeInt = closeTime ? parseInt(closeTime, 10) : undefined;
-
-        if (closeInt !== undefined) {
-          // Handle overnight by allowing close day to differ
-          if (todayPeriod.close?.day !== day && closeInt < openInt) {
-            hours.isOpen = parseInt(hhmm, 10) >= openInt || parseInt(hhmm, 10) < closeInt;
-          } else {
-            hours.isOpen = parseInt(hhmm, 10) >= openInt && parseInt(hhmm, 10) < closeInt;
+      close: p.close
+        ? {
+            day: p.close.day ?? 0,
+            time:
+              p.close.hourMinute ??
+              (p.close.hour !== undefined && p.close.minute !== undefined
+                ? `${String(p.close.hour).padStart(2, '0')}${String(p.close.minute).padStart(2, '0')}`
+                : '0000'),
           }
-        } else {
-          hours.isOpen = parseInt(hhmm, 10) >= openInt;
-        }
+        : undefined,
+    })) || [];
 
-        if (closeTime) {
-          hours.closeTime = `${closeTime.slice(0, 2)}:${closeTime.slice(2)}`;
+  return {
+    openNow: hoursData?.openNow ?? true,
+    periods,
+  };
+}
+
+/**
+ * Compute isOpen and closeTime from cached periods data
+ */
+function computeHoursFromPeriods(
+  cachedData: CachedHoursData,
+  currentTimeOverride?: Date
+): PlaceHours {
+  const { openNow, periods } = cachedData;
+  const hours: PlaceHours = {
+    isOpen: openNow,
+    periods,
+  };
+
+  // Recompute isOpen if admin provided a fake "now"
+  if (currentTimeOverride && periods.length > 0) {
+    const now = currentTimeOverride;
+    const day = now.getDay();
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const todayPeriod = periods.find((p) => p.open.day === day);
+    if (todayPeriod?.open?.time) {
+      const openTime = todayPeriod.open.time;
+      const closeTime = todayPeriod.close?.time;
+      const openInt = parseInt(openTime, 10);
+      const closeInt = closeTime ? parseInt(closeTime, 10) : undefined;
+
+      if (closeInt !== undefined) {
+        // Handle overnight by allowing close day to differ
+        if (todayPeriod.close?.day !== day && closeInt < openInt) {
+          hours.isOpen = parseInt(hhmm, 10) >= openInt || parseInt(hhmm, 10) < closeInt;
+        } else {
+          hours.isOpen = parseInt(hhmm, 10) >= openInt && parseInt(hhmm, 10) < closeInt;
         }
+      } else {
+        hours.isOpen = parseInt(hhmm, 10) >= openInt;
       }
-    } else if (hours.isOpen && periods.length > 0) {
-      const now = new Date();
-      const day = now.getDay();
-      const todayPeriod = periods.find((p: ParsedPeriod) => p.open.day === day);
-      if (todayPeriod?.close?.time) {
-        hours.closeTime = `${todayPeriod.close.time.slice(0, 2)}:${todayPeriod.close.time.slice(2)}`;
+
+      if (closeTime) {
+        hours.closeTime = `${closeTime.slice(0, 2)}:${closeTime.slice(2)}`;
       }
     }
+  } else if (hours.isOpen && periods.length > 0) {
+    const now = new Date();
+    const day = now.getDay();
+    const todayPeriod = periods.find((p) => p.open.day === day);
+    if (todayPeriod?.close?.time) {
+      hours.closeTime = `${todayPeriod.close.time.slice(0, 2)}:${todayPeriod.close.time.slice(2)}`;
+    }
+  }
 
-    hoursCache.set(placeId, { hours, timestamp: Date.now() });
-    return hours;
+  return hours;
+}
+
+/**
+ * Check if a place is currently open
+ * Uses two-tier cache (Firestore + localStorage) for API responses
+ */
+export async function getPlaceHours(placeId: string, currentTimeOverride?: Date): Promise<PlaceHours> {
+  try {
+    const cacheKey = getCacheKey('hours', placeId);
+
+    const cachedData = await getCached<CachedHoursData>(
+      cacheKey,
+      'hours',
+      placeId,
+      CACHE_TTL.PLACE_HOURS,
+      CACHE_TTL.LOCAL_HOURS,
+      () => fetchPlaceHoursFromApi(placeId)
+    );
+
+    return computeHoursFromPeriods(cachedData, currentTimeOverride);
   } catch (err) {
     console.error('Place hours error:', err);
-    const mockHours = getMockPlaceHours();
-    hoursCache.set(placeId, { hours: mockHours, timestamp: Date.now() });
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'debug-session',
-        runId: 'pre-fix',
-        hypothesisId: 'H4',
-        location: 'googlePlaces.ts:getPlaceHours',
-        message: 'hours fetch error fallback',
-        data: { placeId, durationMs: Date.now() - start, error: String(err) },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return mockHours;
+    return getMockPlaceHours();
   }
 }
 
@@ -301,41 +323,58 @@ export function getGoogleMapsUrl(
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
-/**
- * Fetch a Google Places photo URL (publicly accessible) for a place.
- * Caches per place + width to minimize API calls.
- */
-export async function getGooglePlacePhotoUrl(placeId: string, maxWidthPx = 800): Promise<string | null> {
-  const cacheKey = `${placeId}:${maxWidthPx}`;
-  const cached = photoUrlCache.get(cacheKey);
-  if (cached) return cached;
+interface CachedPhotoData {
+  photoUrl: string | null;
+}
 
+/**
+ * Fetch photo URL from Google Places API (used by cache)
+ */
+async function fetchPlacePhotoFromApi(placeId: string, maxWidthPx: number): Promise<CachedPhotoData> {
   const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
   if (!apiKey || apiKey === 'undefined') {
     console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; cannot fetch place photo');
-    return null;
+    return { photoUrl: null };
   }
 
+  const fieldMask = 'photos';
+  const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
+    headers: {
+      'X-Goog-Api-Key': apiKey,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Place photos failed: ${res.status} ${text}`);
+  }
+
+  const data = await res.json();
+  const photoName: string | undefined = data?.photos?.[0]?.name;
+  if (!photoName) return { photoUrl: null };
+
+  const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidthPx}&key=${apiKey}`;
+  return { photoUrl: mediaUrl };
+}
+
+/**
+ * Fetch a Google Places photo URL (publicly accessible) for a place.
+ * Uses two-tier cache (Firestore + localStorage) for API responses
+ */
+export async function getGooglePlacePhotoUrl(placeId: string, maxWidthPx = 800): Promise<string | null> {
   try {
-    const fieldMask = 'photos';
-    const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
-      headers: {
-        'X-Goog-Api-Key': apiKey,
-      },
-    });
+    const cacheKey = getCacheKey('photo', placeId, String(maxWidthPx));
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Place photos failed: ${res.status} ${text}`);
-    }
+    const cachedData = await getCached<CachedPhotoData>(
+      cacheKey,
+      'photo',
+      placeId,
+      CACHE_TTL.PLACE_PHOTO,
+      CACHE_TTL.LOCAL_PHOTO,
+      () => fetchPlacePhotoFromApi(placeId, maxWidthPx)
+    );
 
-    const data = await res.json();
-    const photoName: string | undefined = data?.photos?.[0]?.name;
-    if (!photoName) return null;
-
-    const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidthPx}&key=${apiKey}`;
-    photoUrlCache.set(cacheKey, mediaUrl);
-    return mediaUrl;
+    return cachedData.photoUrl;
   } catch (err) {
     console.error('Place photo error:', err);
     return null;

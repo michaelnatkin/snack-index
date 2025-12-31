@@ -131,97 +131,93 @@ export function PermissionsScreen() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center px-6 bg-background">
-      <div className="max-w-[28rem] w-full mx-auto text-center">
-        {/* Header */}
-        <h1 className="text-2xl font-bold text-charcoal mb-2 font-display leading-tight">
-          To find snacks near you, we need a couple things...
-        </h1>
+    <div className="app-shell">
+      <div className="shell-inner min-h-screen flex flex-col justify-center">
+        <div className="glass-panel p-6 text-center">
+          <h1 className="text-2xl font-bold text-charcoal mb-2 font-display leading-tight">
+            To find snacks near you, we need a couple things...
+          </h1>
 
-        {/* Permission cards */}
-        <div className="mt-8 space-y-4">
-          {/* Location card */}
-          <div className="bg-surface rounded-lg p-4 shadow-sm border border-butter/50">
-            <div className="flex items-start gap-3">
-              <span className="text-3xl" role="img" aria-label="location">
-                📍
-              </span>
-              <div className="text-left">
-                <h3 className="font-semibold text-charcoal">Your location</h3>
-                <p className="text-sm text-text-muted">
-                  So we know what&apos;s nearby
-                </p>
+          <div className="mt-8 space-y-4">
+            <div className="rounded-xl border border-butter/50 bg-white/80 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="text-3xl" role="img" aria-label="location">
+                  📍
+                </span>
+                <div className="text-left">
+                  <h3 className="font-semibold text-charcoal">Your location</h3>
+                  <p className="text-sm text-text-muted">
+                    So we know what&apos;s nearby
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-butter/50 bg-white/80 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="text-3xl" role="img" aria-label="notifications">
+                  🔔
+                </span>
+                <div className="text-left">
+                  <h3 className="font-semibold text-charcoal">Notifications</h3>
+                  <p className="text-sm text-text-muted">
+                    So we can tell you when you&apos;re close
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Notifications card */}
-          <div className="bg-surface rounded-lg p-4 shadow-sm border border-butter/50">
-            <div className="flex items-start gap-3">
-              <span className="text-3xl" role="img" aria-label="notifications">
-                🔔
-              </span>
-              <div className="text-left">
-                <h3 className="font-semibold text-charcoal">Notifications</h3>
-                <p className="text-sm text-text-muted">
-                  So we can tell you when you&apos;re close
-                </p>
-              </div>
+          {error && step === 'location-denied' && (
+            <div className="mt-6 p-4 bg-paprika/10 rounded-lg border border-paprika/20 text-left">
+              <p className="text-sm text-paprika">{error}</p>
+              <p className="text-xs text-text-muted mt-2">
+                Without location access, we can&apos;t find snacks near you.
+                You may need to enable it in your browser settings.
+              </p>
             </div>
-          </div>
-        </div>
-
-        {/* Error message */}
-        {error && step === 'location-denied' && (
-          <div className="mt-6 p-4 bg-paprika/10 rounded-lg border border-paprika/20">
-            <p className="text-sm text-paprika">{error}</p>
-            <p className="text-xs text-text-muted mt-2">
-              Without location access, we can&apos;t find snacks near you.
-              You may need to enable it in your browser settings.
-            </p>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div className="mt-8 space-y-3">
-          {step === 'initial' && (
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={handleLetsGo}
-            >
-              Let&apos;s Go
-            </Button>
           )}
 
-          {step === 'requesting' && (
-            <Button
-              size="lg"
-              className="w-full"
-              loading
-              disabled
-            >
-              Setting up...
-            </Button>
-          )}
-
-          {step === 'location-denied' && (
-            <>
+          <div className="mt-8 space-y-3">
+            {step === 'initial' && (
               <Button
                 size="lg"
                 className="w-full"
-                onClick={handleRetryLocation}
+                onClick={handleLetsGo}
               >
-                Try Again
+                Let&apos;s Go
               </Button>
-              <button
-                onClick={handleSkipAnyway}
-                className="text-sm text-text-muted underline hover:text-charcoal transition-colors"
+            )}
+
+            {step === 'requesting' && (
+              <Button
+                size="lg"
+                className="w-full"
+                loading
+                disabled
               >
-                Continue without location
-              </button>
-            </>
-          )}
+                Setting up...
+              </Button>
+            )}
+
+            {step === 'location-denied' && (
+              <>
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={handleRetryLocation}
+                >
+                  Try Again
+                </Button>
+                <button
+                  onClick={handleSkipAnyway}
+                  className="text-sm text-text-muted underline hover:text-charcoal transition-colors"
+                >
+                  Continue without location
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

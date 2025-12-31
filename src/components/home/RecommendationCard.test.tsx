@@ -64,15 +64,9 @@ describe('RecommendationCard', () => {
     expect(screen.getByText('Test Taco Shop')).toBeInTheDocument();
   });
 
-  it('renders hero dish with THE MOVE label', () => {
+  it('renders hero dish with Top Pick pill', () => {
     render(<RecommendationCard recommendation={mockRecommendation} {...mockHandlers} />);
-    expect(screen.getByText('⭐ THE MOVE')).toBeInTheDocument();
-    expect(screen.getByText('Al Pastor Tacos')).toBeInTheDocument();
-  });
-
-  it('renders Get Directions button', () => {
-    render(<RecommendationCard recommendation={mockRecommendation} {...mockHandlers} />);
-    expect(screen.getByRole('button', { name: /Get Directions/i })).toBeInTheDocument();
+    expect(screen.getByText(/Top Pick: Al Pastor Tacos/)).toBeInTheDocument();
   });
 
   it('displays distance and open status', () => {

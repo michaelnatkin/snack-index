@@ -29,8 +29,8 @@ function NavItem({ to, icon, activeIcon, label }: NavItemProps) {
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-butter/30 z-30">
-      <div className="max-w-[32rem] mx-auto flex items-center justify-around">
+    <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92vw] max-w-[30rem] z-40 floating-nav rounded-2xl">
+      <div className="flex items-center justify-around px-4">
         <NavItem
           to="/home"
           icon={<span>○</span>}
@@ -51,7 +51,7 @@ export function BottomNav() {
         />
       </div>
       {/* Safe area padding for iOS */}
-      <div className="h-safe-area-bottom bg-surface" />
+      <div className="h-safe-area-bottom" />
     </nav>
   );
 }

@@ -51,7 +51,6 @@ export function HomeScreen() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const loadStart = Date.now();
       
       // Get current location (allow admin override)
       const locationResult = overrideLocation
@@ -72,25 +71,7 @@ export function HomeScreen() {
         vegan: false,
         glutenFree: false,
       };
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: 'debug-session',
-          runId: 'pre-fix',
-          hypothesisId: 'H3',
-          location: 'HomeScreen.tsx:loadData',
-          message: 'home load start',
-          data: {
-            hasOverrideLocation: Boolean(overrideLocation),
-            hasOverrideTime: Boolean(overrideTimeIso),
-            userIdPresent: Boolean(user?.id),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+
       try {
         // Determine high-level state
       const nearest = await getNearestOpenPlace(
@@ -100,25 +81,6 @@ export function HomeScreen() {
           Infinity,
           nowOverride
         );
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: 'debug-session',
-            runId: 'pre-fix',
-            hypothesisId: 'H3',
-            location: 'HomeScreen.tsx:loadData',
-            message: 'nearest result',
-            data: {
-              type: nearest.type,
-              elapsedMs: Date.now() - loadStart,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
 
         if (nearest.type === 'not_in_area') {
           setPreviewPlaces(nearest.previewPlaces || []);
@@ -134,9 +96,6 @@ export function HomeScreen() {
           return;
         }
 
-        // Minimum delay for anticipation
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
         const recs = await getRecommendationQueue(
           { latitude, longitude },
           dietaryFilters,
@@ -145,25 +104,6 @@ export function HomeScreen() {
           Infinity,
           nowOverride
         );
-
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a1d3bc91-56c5-4ff8-9c4b-0c1b5cabaab5', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: 'debug-session',
-            runId: 'pre-fix',
-            hypothesisId: 'H3',
-            location: 'HomeScreen.tsx:loadData',
-            message: 'queue result',
-            data: {
-              count: recs.length,
-              elapsedMs: Date.now() - loadStart,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
 
         if (recs.length === 0) {
           setResultType('nothing_open');
@@ -366,56 +306,54 @@ export function HomeScreen() {
       )}
 
       {!loading && resultType === 'recommendations' && currentRecommendation && (
-        <div className="px-4 py-6">
-          <div className="relative">
-            {/* Left chevron */}
+        <div className="px-2 pt-2 pb-4">
+          <div className="relative flex items-center justify-center">
             <button
               aria-label="Previous"
               onClick={goToPrev}
               disabled={currentIndex === 0}
-              className="absolute left-0 top-1/2 -translate-y-1/2 text-4xl text-sage/60 hover:text-sage disabled:opacity-30"
+              className="glass-button text-2xl text-sage/80 hover:text-sage absolute left-2 top-1/2 -translate-y-1/2 disabled:opacity-40"
             >
               ‹
             </button>
 
-            {/* Recommendation Card */}
-            <div className="mx-10">
-              <RecommendationCard
-                recommendation={currentRecommendation}
-                onSwipeLeft={handleSwipeLeft}
-                onSwipeRight={handleSwipeRight}
-                onSwipeUp={handleSwipeUp}
-                onGetDirections={handleGetDirections}
-                onCardTap={handleCardTap}
-              />
+            <div className="w-full max-w-[28rem] px-4">
+              <div className="relative pb-16">
+                <RecommendationCard
+                  recommendation={currentRecommendation}
+                  onSwipeLeft={handleSwipeLeft}
+                  onSwipeRight={handleSwipeRight}
+                  onSwipeUp={handleSwipeUp}
+                  onGetDirections={handleGetDirections}
+                  onCardTap={handleCardTap}
+                />
+
+                <div className="absolute left-1/2 -translate-x-1/2 -bottom-10 flex items-center gap-4">
+                  <button
+                    onClick={handleNotForMe}
+                    className="glass-button text-2xl text-charcoal"
+                    aria-label="Not for me"
+                  >
+                    ✕
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    className="glass-button text-2xl text-paprika"
+                    aria-label="Save to My Snacks"
+                  >
+                    ♡
+                  </button>
+                </div>
+              </div>
             </div>
 
-            {/* Right chevron */}
             <button
               aria-label="Next"
               onClick={goToNext}
               disabled={currentIndex >= recommendations.length - 1}
-              className="absolute right-0 top-1/2 -translate-y-1/2 text-4xl text-sage/60 hover:text-sage disabled:opacity-30"
+              className="glass-button text-2xl text-sage/80 hover:text-sage absolute right-2 top-1/2 -translate-y-1/2 disabled:opacity-40"
             >
               ›
-            </button>
-          </div>
-
-          {/* Secondary Actions */}
-          <div className="flex justify-center gap-8 mt-6">
-            <button
-              onClick={handleSave}
-              className="flex flex-col items-center text-sage hover:text-paprika transition-colors"
-            >
-              <span className="text-3xl">❤️</span>
-              <span className="text-xs mt-1">Save</span>
-            </button>
-            <button
-              onClick={handleNotForMe}
-              className="flex flex-col items-center text-sage hover:text-charcoal transition-colors"
-            >
-              <span className="text-3xl">👎</span>
-              <span className="text-xs mt-1">Not for me</span>
             </button>
           </div>
         </div>
@@ -448,7 +386,7 @@ export function HomeScreen() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-charcoal text-cream px-4 py-2 rounded-lg shadow-lg z-50">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-charcoal text-cream px-4 py-2 rounded-lg shadow-lg z-50">
           {toast}
         </div>
       )}

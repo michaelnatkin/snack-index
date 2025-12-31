@@ -20,30 +20,35 @@ export function Button({
 }: ButtonProps) {
   const baseStyles = `
     inline-flex items-center justify-center gap-2
-    font-medium rounded-lg transition-all duration-200
-    focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+    font-medium rounded-full transition-all duration-200
+    focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white/40
     disabled:opacity-50 disabled:cursor-not-allowed
-    whitespace-nowrap
+    whitespace-nowrap backdrop-blur
   `;
 
   const variantStyles = {
     primary: `
-      bg-primary text-charcoal hover:bg-primary-dark
+      bg-gradient-to-r from-primary to-primary-dark text-charcoal
+      hover:brightness-95
       focus-visible:ring-primary
-      shadow-md hover:shadow-lg
+      shadow-lg hover:shadow-xl
     `,
     secondary: `
-      bg-eggplant text-cream hover:bg-charcoal
+      bg-white/90 text-charcoal border border-white/60
+      hover:bg-white
       focus-visible:ring-eggplant
+      shadow-md
     `,
     outline: `
-      border-2 border-charcoal text-charcoal
+      border-2 border-charcoal/15 text-charcoal
       hover:bg-charcoal hover:text-cream
       focus-visible:ring-charcoal
+      bg-white/60
     `,
     ghost: `
       text-charcoal hover:bg-charcoal/10
       focus-visible:ring-charcoal
+      bg-white/30
     `,
   };
 

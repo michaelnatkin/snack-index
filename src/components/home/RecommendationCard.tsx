@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/Button';
 import { formatDistance } from '@/lib/location';
 import { getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
 import type { PlaceRecommendation } from '@/lib/recommendations';
@@ -18,9 +17,11 @@ export function RecommendationCard({
   onSwipeLeft,
   onSwipeRight,
   onSwipeUp,
-  onGetDirections,
+  onGetDirections: _onGetDirections,
   onCardTap,
 }: RecommendationCardProps) {
+  // Note: onGetDirections kept for API compatibility but swipe-up triggers it
+  void _onGetDirections;
   const cardRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -90,21 +91,18 @@ export function RecommendationCard({
 
   // Get display dish info
   const displayDish = heroDish || dishes[0];
-  const otherDishCount = dishes.length - 1;
 
   return (
     <div className="relative">
-      {/* Swipe hint overlay */}
       {swipeHint && (
         <div className={`absolute inset-0 flex items-center justify-center z-10 pointer-events-none ${swipeHint.color}`}>
           <div className="text-6xl font-bold opacity-50">{swipeHint.icon}</div>
         </div>
       )}
 
-      {/* Card */}
       <div
         ref={cardRef}
-        className="bg-surface rounded-2xl shadow-lg overflow-hidden cursor-grab active:cursor-grabbing animate-card-reveal animate-wobble-once"
+        className="hero-card cursor-grab active:cursor-grabbing animate-card-reveal animate-wobble-once"
         style={{
           transform: `translateX(${offset.x}px) translateY(${offset.y}px) rotate(${offset.x * 0.02}deg)`,
           transition: isDragging ? 'none' : 'transform 0.3s ease-out',
@@ -117,63 +115,51 @@ export function RecommendationCard({
         onMouseUp={handleTouchEnd}
         onMouseLeave={handleTouchEnd}
         onClick={() => {
-          // Only trigger tap if not dragging
           if (Math.abs(offset.x) < 10 && Math.abs(offset.y) < 10) {
             onCardTap();
           }
         }}
       >
-        {/* Hero Image / Gradient */}
-        <div className="h-48 bg-gradient-to-br from-honey via-paprika to-eggplant flex items-center justify-center">
+        <div className="relative aspect-[3/5] w-full">
           {place.imageURL || photoUrl ? (
             <img
               src={place.imageURL || photoUrl || ''}
               alt={place.name}
-              className="w-full h-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            <span className="text-6xl">🍽️</span>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="p-5">
-          <h2 className="text-2xl font-bold text-charcoal font-display mb-1">
-            {place.name}
-          </h2>
-          
-          <p className="text-text-muted mb-4">
-            {formatDistance(distance)} · Open{closeTime ? ` until ${closeTime}` : ''}
-          </p>
-
-          {/* Hero Dish */}
-          {displayDish && (
-            <div className="mb-4">
-              <p className="text-sm text-sage uppercase tracking-wide mb-1">
-                {heroDish ? '⭐ THE MOVE' : 'Try'}
-              </p>
-              <p className="text-lg font-semibold text-charcoal">
-                {displayDish.name}
-              </p>
-              {heroDish && otherDishCount > 0 && (
-                <p className="text-sm text-text-muted">
-                  + {otherDishCount} more {otherDishCount === 1 ? 'dish' : 'dishes'}
-                </p>
-              )}
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-honey via-paprika to-eggplant text-6xl">
+              🍽️
             </div>
           )}
 
-          {/* Get Directions Button */}
-          <Button
-            size="lg"
-            className="w-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              onGetDirections();
-            }}
-          >
-            Get Directions
-          </Button>
+          <div className="hero-card__overlay" />
+
+          <div className="hero-card__content">
+            {/* Spacer to push content to bottom */}
+            <div className="flex-1" />
+
+            {/* Bottom content stack */}
+            <div className="space-y-3">
+              {/* Place name */}
+              <h2 className="text-3xl font-bold font-display leading-tight text-white drop-shadow-lg">
+                {place.name}
+              </h2>
+
+              {/* Distance and hours */}
+              <p className="text-sm text-white/90">
+                {formatDistance(distance)} · Open{closeTime ? ` until ${closeTime}` : ''}
+              </p>
+
+              {/* Top Pick pill - at the bottom */}
+              {displayDish && (
+                <div className="card-pill inline-flex">
+                  <span className="text-base">🔥</span>
+                  <span className="text-sm font-semibold">Top Pick: {displayDish.name}</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

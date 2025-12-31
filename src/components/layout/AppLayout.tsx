@@ -8,10 +8,12 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, hideNav = false }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-background">
-      <main className={hideNav ? '' : 'pb-20'}>
-        {children}
-      </main>
+    <div className="app-shell">
+      <div className="shell-inner">
+        <main className={hideNav ? 'pb-6' : 'pb-28'}>
+          {children}
+        </main>
+      </div>
       {!hideNav && <BottomNav />}
     </div>
   );
