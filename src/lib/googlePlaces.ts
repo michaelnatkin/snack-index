@@ -2,7 +2,6 @@
  * Google Places API utilities
  * 
  * Uses the Google Places API (New) HTTP endpoints.
- * Falls back to mock data when no API key is provided.
  * 
  * Caching: Uses two-tier cache (Firestore + localStorage) for API responses
  * to reduce costs and improve performance across all users.
@@ -10,6 +9,33 @@
 
 import type { Coordinates } from './location';
 import { getCached, getCacheKey, CACHE_TTL } from './cache';
+
+/**
+ * Get the Google Places API key, throwing if not configured
+ */
+function getApiKey(): string {
+  const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    throw new Error('VITE_GOOGLE_PLACES_API_KEY is not configured');
+  }
+  return apiKey;
+}
+
+/**
+ * Format a 24-hour time string (HHMM) to 12-hour AM/PM format
+ */
+function formatTimeAmPm(hhmm: string): string {
+  const hour24 = parseInt(hhmm.slice(0, 2), 10);
+  const minute = hhmm.slice(2);
+  const period = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 || 12;
+  
+  // Omit minutes if :00
+  if (minute === '00') {
+    return `${hour12} ${period}`;
+  }
+  return `${hour12}:${minute} ${period}`;
+}
 
 export interface PlaceAutocompleteResult {
   placeId: string;
@@ -44,11 +70,7 @@ const DEFAULT_RADIUS_METERS = 50_000;
 export async function searchPlaces(
   query: string
 ): Promise<PlaceAutocompleteResult[]> {
-  const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
-  if (!apiKey) {
-    console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; using mock data');
-    return getMockAutocompleteResults(query);
-  }
+  const apiKey = getApiKey();
 
   const body = {
     input: query,
@@ -60,37 +82,32 @@ export async function searchPlaces(
     },
   };
 
-  try {
-    const res = await fetch(`${API_BASE}/places:autocomplete`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-      },
-      body: JSON.stringify(body),
-    });
+  const res = await fetch(`${API_BASE}/places:autocomplete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+    },
+    body: JSON.stringify(body),
+  });
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Places autocomplete failed: ${res.status} ${text}`);
-    }
-
-    const data = await res.json() as { suggestions?: Array<{ placePrediction?: { placeId?: string; text?: { text?: string }; structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } } }; placeId?: string; text?: { text?: string } }> };
-    const suggestions = data.suggestions || [];
-
-    return suggestions.map((s) => ({
-      placeId: s.placePrediction?.placeId ?? s.placeId ?? '',
-      name: s.placePrediction?.structuredFormat?.mainText?.text ?? s.placePrediction?.text?.text ?? s.text?.text ?? '',
-      address:
-        s.placePrediction?.structuredFormat?.secondaryText?.text ??
-        s.placePrediction?.text?.text ??
-        s.text?.text ??
-        '',
-    })).filter((p: PlaceAutocompleteResult) => p.placeId && p.name);
-  } catch (err) {
-    console.error('Places autocomplete error:', err);
-    return getMockAutocompleteResults(query);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Places autocomplete failed: ${res.status} ${text}`);
   }
+
+  const data = await res.json() as { suggestions?: Array<{ placePrediction?: { placeId?: string; text?: { text?: string }; structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } } }; placeId?: string; text?: { text?: string } }> };
+  const suggestions = data.suggestions || [];
+
+  return suggestions.map((s) => ({
+    placeId: s.placePrediction?.placeId ?? s.placeId ?? '',
+    name: s.placePrediction?.structuredFormat?.mainText?.text ?? s.placePrediction?.text?.text ?? s.text?.text ?? '',
+    address:
+      s.placePrediction?.structuredFormat?.secondaryText?.text ??
+      s.placePrediction?.text?.text ??
+      s.text?.text ??
+      '',
+  })).filter((p: PlaceAutocompleteResult) => p.placeId && p.name);
 }
 
 interface CachedDetailsData {
@@ -101,11 +118,7 @@ interface CachedDetailsData {
  * Fetch place details from Google Places API (used by cache)
  */
 async function fetchPlaceDetailsFromApi(placeId: string): Promise<CachedDetailsData> {
-  const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
-  if (!apiKey) {
-    console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; using mock data');
-    return { details: getMockPlaceDetails(placeId) };
-  }
+  const apiKey = getApiKey();
 
   const fieldMask = 'id,displayName,formattedAddress,location,regularOpeningHours,currentOpeningHours';
   const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
@@ -140,23 +153,18 @@ async function fetchPlaceDetailsFromApi(placeId: string): Promise<CachedDetailsD
  * Uses two-tier cache (Firestore + localStorage) for API responses
  */
 export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
-  try {
-    const cacheKey = getCacheKey('details', placeId);
+  const cacheKey = getCacheKey('details', placeId);
 
-    const cachedData = await getCached<CachedDetailsData>(
-      cacheKey,
-      'details',
-      placeId,
-      CACHE_TTL.PLACE_DETAILS,
-      CACHE_TTL.LOCAL_DETAILS,
-      () => fetchPlaceDetailsFromApi(placeId)
-    );
+  const cachedData = await getCached<CachedDetailsData>(
+    cacheKey,
+    'details',
+    placeId,
+    CACHE_TTL.PLACE_DETAILS,
+    CACHE_TTL.LOCAL_DETAILS,
+    () => fetchPlaceDetailsFromApi(placeId)
+  );
 
-    return cachedData.details;
-  } catch (err) {
-    console.error('Place details error:', err);
-    return getMockPlaceDetails(placeId);
-  }
+  return cachedData.details;
 }
 
 type ParsedPeriod = { open: { day: number; time: string }; close?: { day: number; time: string } };
@@ -165,7 +173,6 @@ type ParsedPeriod = { open: { day: number; time: string }; close?: { day: number
  * Raw hours data from the API (cached in Firestore)
  */
 interface CachedHoursData {
-  openNow: boolean;
   periods: ParsedPeriod[];
 }
 
@@ -173,11 +180,7 @@ interface CachedHoursData {
  * Fetch raw hours data from Google Places API (used by cache)
  */
 async function fetchPlaceHoursFromApi(placeId: string): Promise<CachedHoursData> {
-  const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
-  if (!apiKey) {
-    console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; using mock data');
-    return { openNow: true, periods: getMockPlaceHours().periods || [] };
-  }
+  const apiKey = getApiKey();
 
   const fieldMask = 'currentOpeningHours';
   const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
@@ -214,58 +217,55 @@ async function fetchPlaceHoursFromApi(placeId: string): Promise<CachedHoursData>
         : undefined,
     })) || [];
 
-  return {
-    openNow: hoursData?.openNow ?? true,
-    periods,
-  };
+  return { periods };
 }
 
 /**
  * Compute isOpen and closeTime from cached periods data
+ * Always computes isOpen from periods using current time (or override)
  */
 function computeHoursFromPeriods(
   cachedData: CachedHoursData,
   currentTimeOverride?: Date
 ): PlaceHours {
-  const { openNow, periods } = cachedData;
+  const { periods } = cachedData;
   const hours: PlaceHours = {
-    isOpen: openNow,
+    isOpen: false,
     periods,
   };
 
-  // Recompute isOpen if admin provided a fake "now"
-  if (currentTimeOverride && periods.length > 0) {
-    const now = currentTimeOverride;
-    const day = now.getDay();
-    const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    const todayPeriod = periods.find((p) => p.open.day === day);
-    if (todayPeriod?.open?.time) {
-      const openTime = todayPeriod.open.time;
-      const closeTime = todayPeriod.close?.time;
-      const openInt = parseInt(openTime, 10);
-      const closeInt = closeTime ? parseInt(closeTime, 10) : undefined;
+  if (periods.length === 0) {
+    return hours;
+  }
 
-      if (closeInt !== undefined) {
-        // Handle overnight by allowing close day to differ
-        if (todayPeriod.close?.day !== day && closeInt < openInt) {
-          hours.isOpen = parseInt(hhmm, 10) >= openInt || parseInt(hhmm, 10) < closeInt;
-        } else {
-          hours.isOpen = parseInt(hhmm, 10) >= openInt && parseInt(hhmm, 10) < closeInt;
-        }
+  const now = currentTimeOverride ?? new Date();
+  const day = now.getDay();
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const nowInt = parseInt(hhmm, 10);
+
+  // Find the period for today
+  const todayPeriod = periods.find((p) => p.open.day === day);
+
+  if (todayPeriod?.open?.time) {
+    const openTime = todayPeriod.open.time;
+    const closeTime = todayPeriod.close?.time;
+    const openInt = parseInt(openTime, 10);
+    const closeInt = closeTime ? parseInt(closeTime, 10) : undefined;
+
+    if (closeInt !== undefined) {
+      // Handle overnight by allowing close day to differ
+      if (todayPeriod.close?.day !== day && closeInt < openInt) {
+        hours.isOpen = nowInt >= openInt || nowInt < closeInt;
       } else {
-        hours.isOpen = parseInt(hhmm, 10) >= openInt;
+        hours.isOpen = nowInt >= openInt && nowInt < closeInt;
       }
-
-      if (closeTime) {
-        hours.closeTime = `${closeTime.slice(0, 2)}:${closeTime.slice(2)}`;
-      }
+    } else {
+      // No close time means open until end of day
+      hours.isOpen = nowInt >= openInt;
     }
-  } else if (hours.isOpen && periods.length > 0) {
-    const now = new Date();
-    const day = now.getDay();
-    const todayPeriod = periods.find((p) => p.open.day === day);
-    if (todayPeriod?.close?.time) {
-      hours.closeTime = `${todayPeriod.close.time.slice(0, 2)}:${todayPeriod.close.time.slice(2)}`;
+
+    if (closeTime) {
+      hours.closeTime = formatTimeAmPm(closeTime);
     }
   }
 
@@ -277,23 +277,18 @@ function computeHoursFromPeriods(
  * Uses two-tier cache (Firestore + localStorage) for API responses
  */
 export async function getPlaceHours(placeId: string, currentTimeOverride?: Date): Promise<PlaceHours> {
-  try {
-    const cacheKey = getCacheKey('hours', placeId);
+  const cacheKey = getCacheKey('hours', placeId);
 
-    const cachedData = await getCached<CachedHoursData>(
-      cacheKey,
-      'hours',
-      placeId,
-      CACHE_TTL.PLACE_HOURS,
-      CACHE_TTL.LOCAL_HOURS,
-      () => fetchPlaceHoursFromApi(placeId)
-    );
+  const cachedData = await getCached<CachedHoursData>(
+    cacheKey,
+    'hours',
+    placeId,
+    CACHE_TTL.PLACE_HOURS,
+    CACHE_TTL.LOCAL_HOURS,
+    () => fetchPlaceHoursFromApi(placeId)
+  );
 
-    return computeHoursFromPeriods(cachedData, currentTimeOverride);
-  } catch (err) {
-    console.error('Place hours error:', err);
-    return getMockPlaceHours();
-  }
+  return computeHoursFromPeriods(cachedData, currentTimeOverride);
 }
 
 /**
@@ -331,11 +326,7 @@ interface CachedPhotoData {
  * Fetch photo URL from Google Places API (used by cache)
  */
 async function fetchPlacePhotoFromApi(placeId: string, maxWidthPx: number): Promise<CachedPhotoData> {
-  const apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY;
-  if (!apiKey || apiKey === 'undefined') {
-    console.warn('VITE_GOOGLE_PLACES_API_KEY is not set; cannot fetch place photo');
-    return { photoUrl: null };
-  }
+  const apiKey = getApiKey();
 
   const fieldMask = 'photos';
   const res = await fetch(`${API_BASE}/places/${placeId}?fields=${encodeURIComponent(fieldMask)}`, {
@@ -362,88 +353,19 @@ async function fetchPlacePhotoFromApi(placeId: string, maxWidthPx: number): Prom
  * Uses two-tier cache (Firestore + localStorage) for API responses
  */
 export async function getGooglePlacePhotoUrl(placeId: string, maxWidthPx = 800): Promise<string | null> {
-  try {
-    const cacheKey = getCacheKey('photo', placeId, String(maxWidthPx));
+  // Fail fast on configuration errors
+  getApiKey();
 
-    const cachedData = await getCached<CachedPhotoData>(
-      cacheKey,
-      'photo',
-      placeId,
-      CACHE_TTL.PLACE_PHOTO,
-      CACHE_TTL.LOCAL_PHOTO,
-      () => fetchPlacePhotoFromApi(placeId, maxWidthPx)
-    );
+  const cacheKey = getCacheKey('photo', placeId, String(maxWidthPx));
 
-    return cachedData.photoUrl;
-  } catch (err) {
-    console.error('Place photo error:', err);
-    return null;
-  }
-}
-
-// ============= Mock data for development =============
-
-function getMockAutocompleteResults(query: string): PlaceAutocompleteResult[] {
-  const mockPlaces = [
-    { placeId: 'mock-1', name: 'Marination Station', address: 'Capitol Hill, Seattle, WA' },
-    { placeId: 'mock-2', name: 'Off the Rez', address: 'University District, Seattle, WA' },
-    { placeId: 'mock-3', name: 'Tacos Chukis', address: 'Capitol Hill, Seattle, WA' },
-    { placeId: 'mock-4', name: 'Xian Noodles', address: 'University District, Seattle, WA' },
-    { placeId: 'mock-5', name: 'Piroshky Piroshky', address: 'Pike Place Market, Seattle, WA' },
-    { placeId: 'mock-temple', name: 'Temple Pastries', address: '2124 S Jackson St, Seattle, WA' },
-  ];
-
-  return mockPlaces.filter((p) =>
-    p.name.toLowerCase().includes(query.toLowerCase())
+  const cachedData = await getCached<CachedPhotoData>(
+    cacheKey,
+    'photo',
+    placeId,
+    CACHE_TTL.PLACE_PHOTO,
+    CACHE_TTL.LOCAL_PHOTO,
+    () => fetchPlacePhotoFromApi(placeId, maxWidthPx)
   );
+
+  return cachedData.photoUrl;
 }
-
-function getMockPlaceDetails(placeId: string): PlaceDetails | null {
-  const mockDetails: Record<string, PlaceDetails> = {
-    'mock-1': {
-      placeId: 'mock-1',
-      name: 'Marination Station',
-      address: '1412 Harvard Ave, Seattle, WA 98122',
-      latitude: 47.6135,
-      longitude: -122.3208,
-    },
-    'mock-2': {
-      placeId: 'mock-2',
-      name: 'Off the Rez',
-      address: '4502 University Way NE, Seattle, WA 98105',
-      latitude: 47.6614,
-      longitude: -122.3131,
-    },
-    'mock-3': {
-      placeId: 'mock-3',
-      name: 'Tacos Chukis',
-      address: '219 Broadway E, Seattle, WA 98102',
-      latitude: 47.6204,
-      longitude: -122.3213,
-    },
-    'mock-temple': {
-      placeId: 'mock-temple',
-      name: 'Temple Pastries',
-      address: '2124 S Jackson St, Seattle, WA 98144',
-      latitude: 47.5993,
-      longitude: -122.3031,
-    },
-  };
-
-  return mockDetails[placeId] || null;
-}
-
-function getMockPlaceHours(): PlaceHours {
-  // Randomly return open or closed for testing
-  return {
-    isOpen: true,
-    closeTime: '21:00',
-    periods: [
-      {
-        open: { day: 1, time: '0800' },
-        close: { day: 1, time: '2100' },
-      },
-    ],
-  };
-}
-

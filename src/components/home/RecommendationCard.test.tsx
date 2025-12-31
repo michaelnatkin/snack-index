@@ -47,7 +47,7 @@ const mockRecommendation: PlaceRecommendation = {
   ],
   distance: 0.3,
   isOpen: true,
-  closeTime: '21:00',
+  closeTime: '9 PM',
 };
 
 describe('RecommendationCard', () => {
