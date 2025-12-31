@@ -55,8 +55,6 @@ describe('RecommendationCard', () => {
     onSwipeLeft: vi.fn(),
     onSwipeRight: vi.fn(),
     onSwipeUp: vi.fn(),
-    onGetDirections: vi.fn(),
-    onCardTap: vi.fn(),
   };
 
   it('renders place name', () => {

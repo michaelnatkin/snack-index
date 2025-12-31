@@ -32,7 +32,7 @@ export function BottomNav() {
     <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92vw] max-w-[30rem] z-40 floating-nav rounded-2xl">
       <div className="flex items-center justify-around px-4">
         <NavItem
-          to="/home"
+          to="/"
           icon={<span>○</span>}
           activeIcon={<span>●</span>}
           label="Home"

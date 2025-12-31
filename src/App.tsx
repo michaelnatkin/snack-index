@@ -29,7 +29,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/home" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -54,13 +54,13 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public welcome route */}
       <Route
-        path="/"
+        path="/welcome"
         element={
           isAuthenticated ? (
             user?.onboarding.completed ? (
-              <Navigate to="/home" replace />
+              <Navigate to="/" replace />
             ) : (
               <Navigate to="/permissions" replace />
             )
@@ -80,14 +80,20 @@ function AppRoutes() {
         }
       />
 
-      {/* Protected routes */}
+      {/* Home route - protected */}
       <Route
-        path="/home"
+        path="/"
         element={
           <AuthGuard>
             <HomeScreen />
           </AuthGuard>
         }
+      />
+
+      {/* Legacy /home redirect */}
+      <Route
+        path="/home"
+        element={<Navigate to="/" replace />}
       />
       <Route
         path="/my-snacks"

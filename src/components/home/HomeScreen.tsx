@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { DietarySheet } from '@/components/onboarding/DietarySheet';
 import { LoadingState } from './LoadingState';
 import { RecommendationCard } from './RecommendationCard';
@@ -8,14 +9,15 @@ import { SwipeTutorial } from './SwipeTutorial';
 import { NothingOpenState } from './NothingOpenState';
 import { NotInAreaState } from './NotInAreaState';
 import { useUserStore } from '@/stores/userStore';
-import { requestLocation } from '@/lib/location';
+import { requestLocation, getLocationPermissionState } from '@/lib/location';
+import { Button } from '@/components/ui/Button';
 import {
   getRecommendationQueue,
   getNearestOpenPlace,
   type PlaceRecommendation,
 } from '@/lib/recommendations';
 import { useTestingStore } from '@/stores/testingStore';
-import { favoritePlace, markPlaceVisited, dismissPlace } from '@/lib/interactions';
+import { markPlaceVisited, dismissPlace } from '@/lib/interactions';
 import { getGoogleMapsUrl } from '@/lib/googlePlaces';
 import { DismissModal } from './DismissModal';
 import { CelebrationModal } from './CelebrationModal';
@@ -23,7 +25,7 @@ import type { Place } from '@/types/models';
 
 export function HomeScreen() {
   const navigate = useNavigate();
-  const { user, updateOnboarding } = useUserStore();
+  const { user, updateOnboarding, updatePermissions } = useUserStore();
   const { overrideLocation, overrideTimeIso } = useTestingStore();
 
   // UI State
@@ -44,8 +46,85 @@ export function HomeScreen() {
   // Data state
   const [recommendations, setRecommendations] = useState<PlaceRecommendation[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [resultType, setResultType] = useState<'loading' | 'recommendations' | 'nothing_open' | 'not_in_area' | 'all_seen'>('loading');
+  const [resultType, setResultType] = useState<'loading' | 'recommendations' | 'nothing_open' | 'not_in_area' | 'all_seen' | 'needs_location_prompt'>('loading');
   const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Load recommendations with given coordinates
+  const loadRecommendationsWithCoords = useCallback(async (coords: { latitude: number; longitude: number }) => {
+    setUserCoordinates(coords);
+    const nowOverride = overrideTimeIso ? new Date(overrideTimeIso) : undefined;
+    const dietaryFilters = user?.preferences.dietaryFilters || {
+      vegetarian: false,
+      vegan: false,
+      glutenFree: false,
+    };
+
+    try {
+      // Determine high-level state
+      const nearest = await getNearestOpenPlace(
+        coords,
+        dietaryFilters,
+        user?.id || '',
+        Infinity,
+        nowOverride
+      );
+
+      if (nearest.type === 'not_in_area') {
+        setPreviewPlaces(nearest.previewPlaces || []);
+        setResultType('not_in_area');
+        setLoading(false);
+        return;
+      }
+
+      if (nearest.type === 'nothing_open') {
+        if (nearest.nextToOpen) setNextToOpen(nearest.nextToOpen);
+        setResultType('nothing_open');
+        setLoading(false);
+        return;
+      }
+
+      const recs = await getRecommendationQueue(
+        coords,
+        dietaryFilters,
+        user?.id || '',
+        10,
+        Infinity,
+        nowOverride
+      );
+
+      if (recs.length === 0) {
+        setResultType('nothing_open');
+      } else {
+        setRecommendations(recs);
+        setResultType('recommendations');
+      }
+    } catch (err) {
+      console.error('Failed to load recommendations:', err);
+      setResultType('nothing_open');
+    }
+
+    setLoading(false);
+  }, [overrideTimeIso, user?.preferences.dietaryFilters, user?.id]);
+
+  // Handle location request triggered by user gesture
+  const handleRequestLocation = async () => {
+    setLoading(true);
+    setLocationError(null);
+    const locationResult = await requestLocation();
+    if (!locationResult.success || !locationResult.coordinates) {
+      setLocationError(locationResult.error || 'Location required to find snacks nearby');
+      setResultType('nothing_open');
+      setLoading(false);
+      return;
+    }
+    // Store permission state
+    const permState = await getLocationPermissionState();
+    if (permState === 'granted') {
+      updatePermissions({ location: 'granted' });
+    }
+    // Load data with the fresh location
+    await loadRecommendationsWithCoords(locationResult.coordinates);
+  };
 
   // Load recommendations on mount
   useEffect(() => {
@@ -53,9 +132,26 @@ export function HomeScreen() {
       setLoading(true);
       
       // Get current location (allow admin override)
-      const locationResult = overrideLocation
-        ? { success: true, coordinates: overrideLocation }
-        : await requestLocation();
+      let locationResult: { success: boolean; coordinates?: { latitude: number; longitude: number }; error?: string };
+      
+      if (overrideLocation) {
+        locationResult = { success: true, coordinates: overrideLocation };
+      } else {
+        // Always use cached location first to avoid geolocation API issues
+        const cached = user?.lastKnownLocation;
+        if (cached) {
+          locationResult = { 
+            success: true, 
+            coordinates: { latitude: cached.latitude, longitude: cached.longitude } 
+          };
+        } else {
+          // No cached location - need user gesture to request
+          setResultType('needs_location_prompt');
+          setLoading(false);
+          return;
+        }
+      }
+      
       if (!locationResult.success || !locationResult.coordinates) {
         setLocationError(locationResult.error || 'Location required to find snacks nearby');
         setResultType('nothing_open');
@@ -63,65 +159,13 @@ export function HomeScreen() {
         return;
       }
 
-      const { latitude, longitude } = locationResult.coordinates;
-      setUserCoordinates({ latitude, longitude });
-      const nowOverride = overrideTimeIso ? new Date(overrideTimeIso) : undefined;
-      const dietaryFilters = user?.preferences.dietaryFilters || {
-        vegetarian: false,
-        vegan: false,
-        glutenFree: false,
-      };
-
-      try {
-        // Determine high-level state
-      const nearest = await getNearestOpenPlace(
-          { latitude, longitude },
-          dietaryFilters,
-          user?.id || '',
-          Infinity,
-          nowOverride
-        );
-
-        if (nearest.type === 'not_in_area') {
-          setPreviewPlaces(nearest.previewPlaces || []);
-          setResultType('not_in_area');
-          setLoading(false);
-          return;
-        }
-
-        if (nearest.type === 'nothing_open') {
-          if (nearest.nextToOpen) setNextToOpen(nearest.nextToOpen);
-          setResultType('nothing_open');
-          setLoading(false);
-          return;
-        }
-
-        const recs = await getRecommendationQueue(
-          { latitude, longitude },
-          dietaryFilters,
-          user?.id || '',
-          10,
-          Infinity,
-          nowOverride
-        );
-
-        if (recs.length === 0) {
-          setResultType('nothing_open');
-        } else {
-          setRecommendations(recs);
-          setResultType('recommendations');
-        }
-      } catch (err) {
-        console.error('Failed to load recommendations:', err);
-        setResultType('nothing_open');
-      }
-
-      setLoading(false);
+      await loadRecommendationsWithCoords(locationResult.coordinates);
     };
 
     loadData();
-    // Re-run when location override, time override, or user prefs change
-  }, [overrideLocation, overrideTimeIso, user?.preferences.notificationDistance, user?.preferences.dietaryFilters, user?.id]);
+    // Re-run when location override changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideLocation, overrideTimeIso, user?.id]);
 
   // Show dietary sheet on first load
   useEffect(() => {
@@ -219,14 +263,7 @@ export function HomeScreen() {
     goToNext();
   };
 
-  const handleGetDirections = async () => {
-    // Track button tap
-    buttonTapCountRef.current += 1;
-    maybeShowSwipeNudge(buttonTapCountRef.current);
-    await handleSwipeUp();
-  };
-
-  const handleCardTap = () => {
+  const handleGoToDetails = () => {
     if (currentRecommendation) {
       navigate(`/place/${currentRecommendation.place.id}`);
     }
@@ -236,24 +273,6 @@ export function HomeScreen() {
     buttonTapCountRef.current += 1;
     maybeShowSwipeNudge(buttonTapCountRef.current);
     setDismissOpen(true);
-  };
-
-  const handleSave = () => {
-    buttonTapCountRef.current += 1;
-    maybeShowSwipeNudge(buttonTapCountRef.current);
-  if (!user || !currentRecommendation) return;
-
-  favoritePlace(user.id, currentRecommendation.place.id)
-    .then(() => {
-      setToast('Saved to My Snacks');
-      setTimeout(() => setToast(null), 2500);
-      goToNext();
-    })
-    .catch((err) => {
-      console.error('Failed to save favorite:', err);
-      setToast('Could not save. Try again.');
-      setTimeout(() => setToast(null), 2500);
-    });
   };
 
   const handleDismissNever = async () => {
@@ -282,7 +301,7 @@ export function HomeScreen() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout hideNav>
       {loading && <LoadingState />}
 
       {!loading && resultType === 'not_in_area' && (
@@ -291,6 +310,21 @@ export function HomeScreen() {
 
       {!loading && resultType === 'nothing_open' && (
         <NothingOpenState nextToOpen={nextToOpen} />
+      )}
+
+      {!loading && resultType === 'needs_location_prompt' && (
+        <div className="flex flex-col items-center justify-center min-h-[70vh] px-6 text-center">
+          <span className="text-6xl mb-4">📍</span>
+          <h2 className="text-2xl font-bold text-charcoal mb-2 font-display">
+            Enable Location
+          </h2>
+          <p className="text-text-muted mb-6">
+            We need your location to find snacks near you.
+          </p>
+          <Button onClick={handleRequestLocation} size="lg">
+            Enable Location
+          </Button>
+        </div>
       )}
 
       {!loading && resultType === 'all_seen' && (
@@ -306,57 +340,64 @@ export function HomeScreen() {
       )}
 
       {!loading && resultType === 'recommendations' && currentRecommendation && (
-        <div className="px-2 pt-2 pb-4">
-          <div className="relative flex items-center justify-center">
+        <>
+          {/* Profile Menu - top right */}
+          <div className="fixed top-4 right-4 z-50">
+            <ProfileMenu />
+          </div>
+
+          {/* Full-page recommendation */}
+          <RecommendationCard
+            recommendation={currentRecommendation}
+            onSwipeLeft={handleSwipeLeft}
+            onSwipeRight={handleSwipeRight}
+            onSwipeUp={handleSwipeUp}
+          />
+
+          {/* Navigation chevrons */}
+          <button
+            aria-label="Previous"
+            onClick={goToPrev}
+            disabled={currentIndex === 0}
+            className={`nav-chevron nav-chevron--left ${currentIndex === 0 ? 'nav-chevron--disabled' : ''}`}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+
+          <button
+            aria-label="Next"
+            onClick={goToNext}
+            disabled={currentIndex >= recommendations.length - 1}
+            className={`nav-chevron nav-chevron--right ${currentIndex >= recommendations.length - 1 ? 'nav-chevron--disabled' : ''}`}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+
+          {/* Action buttons - bottom */}
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 z-40">
             <button
-              aria-label="Previous"
-              onClick={goToPrev}
-              disabled={currentIndex === 0}
-              className="glass-button text-2xl text-sage/80 hover:text-sage absolute left-2 top-1/2 -translate-y-1/2 disabled:opacity-40"
+              onClick={handleNotForMe}
+              className="action-button action-button--dismiss"
+              aria-label="Not for me"
             >
-              ‹
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" />
+                <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" />
+              </svg>
             </button>
-
-            <div className="w-full max-w-[28rem] px-4">
-              <div className="relative pb-16">
-                <RecommendationCard
-                  recommendation={currentRecommendation}
-                  onSwipeLeft={handleSwipeLeft}
-                  onSwipeRight={handleSwipeRight}
-                  onSwipeUp={handleSwipeUp}
-                  onGetDirections={handleGetDirections}
-                  onCardTap={handleCardTap}
-                />
-
-                <div className="absolute left-1/2 -translate-x-1/2 -bottom-10 flex items-center gap-4">
-                  <button
-                    onClick={handleNotForMe}
-                    className="glass-button text-2xl text-charcoal"
-                    aria-label="Not for me"
-                  >
-                    ✕
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    className="glass-button text-2xl text-paprika"
-                    aria-label="Save to My Snacks"
-                  >
-                    ♡
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <button
-              aria-label="Next"
-              onClick={goToNext}
-              disabled={currentIndex >= recommendations.length - 1}
-              className="glass-button text-2xl text-sage/80 hover:text-sage absolute right-2 top-1/2 -translate-y-1/2 disabled:opacity-40"
+              onClick={handleGoToDetails}
+              className="action-button action-button--go"
+              aria-label="Go to details"
             >
-              ›
+              <span className="text-lg font-bold">Go</span>
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {/* Dietary Sheet (first load) */}

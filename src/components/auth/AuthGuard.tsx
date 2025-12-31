@@ -24,7 +24,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (!isAuthenticated) {
     // Redirect to welcome, preserving the intended destination
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/welcome" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

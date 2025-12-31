@@ -31,7 +31,7 @@ describe('BottomNav', () => {
     const snacksLink = screen.getByRole('link', { name: /My Snacks/i });
     const settingsLink = screen.getByRole('link', { name: /Settings/i });
 
-    expect(homeLink).toHaveAttribute('href', '/home');
+    expect(homeLink).toHaveAttribute('href', '/');
     expect(snacksLink).toHaveAttribute('href', '/my-snacks');
     expect(settingsLink).toHaveAttribute('href', '/settings');
   });

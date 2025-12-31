@@ -6,7 +6,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { CelebrationModal } from '@/components/home/CelebrationModal';
 import { getPlace, getActiveDishesForPlace, getHeroDishForPlace } from '@/lib/places';
 import { getPlaceHours, getGoogleMapsUrl, getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
-import { markPlaceVisited } from '@/lib/interactions';
+import { markPlaceVisited, favoritePlace } from '@/lib/interactions';
 import { formatDistance, calculateDistance } from '@/lib/location';
 import { useUserStore } from '@/stores/userStore';
 import type { Place, Dish } from '@/types/models';
@@ -27,6 +27,8 @@ export function PlaceDetail() {
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [visitCount, setVisitCount] = useState(0);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (!placeId) return;
@@ -141,6 +143,21 @@ export function PlaceDetail() {
     }
   };
 
+  const handleSave = async () => {
+    if (!place || !user || isSaved) return;
+
+    try {
+      await favoritePlace(user.id, place.id);
+      setIsSaved(true);
+      setSaveToast('Saved to My Snacks!');
+      setTimeout(() => setSaveToast(null), 2500);
+    } catch (err) {
+      console.error('Failed to save favorite:', err);
+      setSaveToast('Could not save. Try again.');
+      setTimeout(() => setSaveToast(null), 2500);
+    }
+  };
+
   // Filter dishes by user's dietary preferences
   const filterDishes = (dishes: Dish[]) => {
     if (!user) return dishes;
@@ -194,14 +211,24 @@ export function PlaceDetail() {
             >
               ←
             </button>
-            <button
-              onClick={handleShare}
-              className="glass-button text-lg"
-              style={{ width: '3rem', height: '3rem' }}
-              aria-label="Share"
-            >
-              ↗️
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSave}
+                className={`glass-button text-lg ${isSaved ? 'text-paprika' : ''}`}
+                style={{ width: '3rem', height: '3rem' }}
+                aria-label={isSaved ? 'Saved' : 'Save to My Snacks'}
+              >
+                {isSaved ? '♥' : '♡'}
+              </button>
+              <button
+                onClick={handleShare}
+                className="glass-button text-lg"
+                style={{ width: '3rem', height: '3rem' }}
+                aria-label="Share"
+              >
+                ↗️
+              </button>
+            </div>
           </div>
 
           <div className="absolute bottom-6 left-6 right-6 text-white drop-shadow-lg space-y-2">
@@ -297,6 +324,13 @@ export function PlaceDetail() {
           visitCount={visitCount}
           onDismiss={handleCelebrationDismiss}
         />
+      )}
+
+      {/* Save Toast */}
+      {saveToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-charcoal text-cream px-4 py-2 rounded-lg shadow-lg z-50">
+          {saveToast}
+        </div>
       )}
     </AppLayout>
   );
