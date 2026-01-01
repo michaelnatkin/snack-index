@@ -207,15 +207,10 @@ export function DishEditor() {
             <div>
               <span className="text-charcoal font-medium">⭐ THE MOVE</span>
               <p className="text-xs text-text-muted">
-                Mark as the signature dish for this place
+                Mark as a signature dish for this place
               </p>
             </div>
           </label>
-          {isHero && (
-            <p className="text-xs text-sage mt-2 ml-8">
-              Only one dish per place can be the hero. Setting this will unset any other hero dish.
-            </p>
-          )}
         </div>
 
         {/* Dietary Tags */}

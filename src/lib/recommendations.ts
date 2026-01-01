@@ -1,4 +1,4 @@
-import { getActivePlaces, getActiveDishesForPlace, getHeroDishForPlace } from './places';
+import { getActivePlaces, getActiveDishesForPlace } from './places';
 import { getPlaceHours } from './googlePlaces';
 import { isInSeattleArea, calculateDistance, type Coordinates } from './location';
 import type { Place, Dish, DietaryFilters, UserPlaceInteraction } from '@/types/models';
@@ -194,8 +194,8 @@ async function processPlaceForNearest(
     nextOpenInMinutes = getMinutesUntilOpenFromPeriods(hours.periods, currentTimeOverride);
   }
 
-  // Only fetch hero dish if place has matching dishes
-  const heroDish = await getHeroDishForPlace(place.id);
+  // Select display dish from matching dishes (prioritizes heroes, picks randomly)
+  const heroDish = selectDisplayDish(matchingDishes);
 
   return {
     place,
@@ -334,8 +334,8 @@ async function processPlaceForRecommendation(
   const isOpen = hours.isOpen;
   if (!isOpen) return null;
 
-  // Only fetch hero dish if we're going to use this place
-  const heroDish = await getHeroDishForPlace(place.id);
+  // Select display dish from matching dishes (prioritizes heroes, picks randomly)
+  const heroDish = selectDisplayDish(matchingDishes);
 
   return {
     place,
@@ -412,6 +412,7 @@ export async function getRecommendationQueue(
 
 /**
  * Filter dishes by dietary requirements
+ * Note: vegan dishes are automatically considered vegetarian
  */
 function filterDishesByDietary(dishes: Dish[], filters: DietaryFilters): Dish[] {
   return dishes.filter((dish) => {
@@ -421,12 +422,32 @@ function filterDishesByDietary(dishes: Dish[], filters: DietaryFilters): Dish[] 
     }
 
     // Check each filter
-    if (filters.vegetarian && !dish.dietary.vegetarian) return false;
+    // Vegan implies vegetarian, so vegan dishes pass the vegetarian filter
+    if (filters.vegetarian && !dish.dietary.vegetarian && !dish.dietary.vegan) return false;
     if (filters.vegan && !dish.dietary.vegan) return false;
     if (filters.glutenFree && !dish.dietary.glutenFree) return false;
 
     return true;
   });
+}
+
+/**
+ * Select the display dish from a list of matching dishes
+ * Priority: random hero dish > random non-hero dish
+ */
+function selectDisplayDish(dishes: Dish[]): Dish | null {
+  if (dishes.length === 0) return null;
+
+  // Separate heroes from non-heroes
+  const heroes = dishes.filter((d) => d.isHero);
+  
+  if (heroes.length > 0) {
+    // Pick a random hero
+    return heroes[Math.floor(Math.random() * heroes.length)];
+  }
+
+  // No heroes, pick a random dish
+  return dishes[Math.floor(Math.random() * dishes.length)];
 }
 
 /**

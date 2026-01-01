@@ -244,4 +244,51 @@ describe('getPlaceHours', () => {
     const hours = await getPlaceHours('abc123', new Date('2025-01-01T14:00:00'));
     expect(hours.closeTime).toBe('9:30 PM');
   });
+
+  it('handles multiple periods per day (lunch and dinner split)', async () => {
+    const cachedData = {
+      periods: [
+        // Lunch: 11am-3pm on Wednesday
+        { open: { day: 3, time: '1100' }, close: { day: 3, time: '1500' } },
+        // Dinner: 5pm-9pm on Wednesday
+        { open: { day: 3, time: '1700' }, close: { day: 3, time: '2100' } },
+      ],
+    };
+    (getCached as unknown as Mock).mockResolvedValue(cachedData);
+
+    // During lunch (1pm) - should be open
+    const lunchTime = new Date('2025-01-01T13:00:00');
+    const lunchHours = await getPlaceHours('abc123', lunchTime);
+    expect(lunchHours.isOpen).toBe(true);
+    expect(lunchHours.closeTime).toBe('3 PM');
+
+    // Between lunch and dinner (4pm) - should be closed
+    const gapTime = new Date('2025-01-01T16:00:00');
+    const gapHours = await getPlaceHours('abc123', gapTime);
+    expect(gapHours.isOpen).toBe(false);
+
+    // During dinner (6pm) - should be open
+    const dinnerTime = new Date('2025-01-01T18:00:00');
+    const dinnerHours = await getPlaceHours('abc123', dinnerTime);
+    expect(dinnerHours.isOpen).toBe(true);
+    expect(dinnerHours.closeTime).toBe('9 PM');
+  });
+
+  it('handles multiple periods - returns correct close time during second period', async () => {
+    const cachedData = {
+      periods: [
+        // Tuesday periods (like Aviv Hummus Bar)
+        { open: { day: 2, time: '1100' }, close: { day: 2, time: '1500' } },
+        { open: { day: 2, time: '1700' }, close: { day: 2, time: '2100' } },
+      ],
+    };
+    (getCached as unknown as Mock).mockResolvedValue(cachedData);
+
+    // 5:58pm on Tuesday - should be open with 9 PM close time
+    const tuesdayEvening = new Date('2025-01-07T17:58:00'); // Jan 7, 2025 is a Tuesday
+    const hours = await getPlaceHours('abc123', tuesdayEvening);
+
+    expect(hours.isOpen).toBe(true);
+    expect(hours.closeTime).toBe('9 PM');
+  });
 });

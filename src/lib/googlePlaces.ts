@@ -243,29 +243,52 @@ function computeHoursFromPeriods(
   const hhmm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
   const nowInt = parseInt(hhmm, 10);
 
-  // Find the period for today
-  const todayPeriod = periods.find((p) => p.open.day === day);
+  // Find ALL periods for today (handles lunch/dinner split hours)
+  const todayPeriods = periods.filter((p) => p.open.day === day);
 
-  if (todayPeriod?.open?.time) {
-    const openTime = todayPeriod.open.time;
-    const closeTime = todayPeriod.close?.time;
+  // Check if current time falls within ANY of today's periods
+  for (const period of todayPeriods) {
+    if (!period.open?.time) continue;
+    
+    const openTime = period.open.time;
+    const closeTime = period.close?.time;
     const openInt = parseInt(openTime, 10);
     const closeInt = closeTime ? parseInt(closeTime, 10) : undefined;
 
+    let isWithinPeriod = false;
     if (closeInt !== undefined) {
       // Handle overnight by allowing close day to differ
-      if (todayPeriod.close?.day !== day && closeInt < openInt) {
-        hours.isOpen = nowInt >= openInt || nowInt < closeInt;
+      if (period.close?.day !== day && closeInt < openInt) {
+        isWithinPeriod = nowInt >= openInt || nowInt < closeInt;
       } else {
-        hours.isOpen = nowInt >= openInt && nowInt < closeInt;
+        isWithinPeriod = nowInt >= openInt && nowInt < closeInt;
       }
     } else {
       // No close time means open until end of day
-      hours.isOpen = nowInt >= openInt;
+      isWithinPeriod = nowInt >= openInt;
     }
 
-    if (closeTime) {
-      hours.closeTime = formatTimeAmPm(closeTime);
+    if (isWithinPeriod) {
+      hours.isOpen = true;
+      if (closeTime) {
+        hours.closeTime = formatTimeAmPm(closeTime);
+      }
+      break;
+    }
+  }
+
+  // If not currently open but there are periods today, show next close time
+  if (!hours.isOpen && todayPeriods.length > 0) {
+    // Find the next period that hasn't closed yet
+    for (const period of todayPeriods) {
+      const closeTime = period.close?.time;
+      if (closeTime) {
+        const closeInt = parseInt(closeTime, 10);
+        if (closeInt > nowInt) {
+          hours.closeTime = formatTimeAmPm(closeTime);
+          break;
+        }
+      }
     }
   }
 

@@ -21,11 +21,9 @@ vi.mock('firebase/firestore', () => ({
 // Mock places
 const mockGetActivePlaces = vi.fn();
 const mockGetActiveDishesForPlace = vi.fn();
-const mockGetHeroDishForPlace = vi.fn();
 vi.mock('./places', () => ({
   getActivePlaces: (...args: unknown[]) => mockGetActivePlaces(...args),
   getActiveDishesForPlace: (...args: unknown[]) => mockGetActiveDishesForPlace(...args),
-  getHeroDishForPlace: (...args: unknown[]) => mockGetHeroDishForPlace(...args),
 }));
 
 // Mock googlePlaces
@@ -92,7 +90,6 @@ describe('Recommendations', () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
     mockGetActivePlaces.mockResolvedValue([]);
     mockGetActiveDishesForPlace.mockResolvedValue([]);
-    mockGetHeroDishForPlace.mockResolvedValue(null);
     mockGetPlaceHours.mockResolvedValue({ isOpen: true, closeTime: undefined });
   });
 
@@ -152,7 +149,6 @@ describe('Recommendations', () => {
       const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
 
       mockGetActiveDishesForPlace.mockResolvedValue([veganDish]);
-      mockGetHeroDishForPlace.mockResolvedValue(veganDish);
       mockGetPlaceHours.mockResolvedValue({ isOpen: true });
 
       const veganFilters: DietaryFilters = { vegetarian: false, vegan: true, glutenFree: false };
@@ -160,6 +156,61 @@ describe('Recommendations', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].place.name).toBe('Vegan Place');
+      expect(result[0].dishes).toHaveLength(1);
+    });
+
+    it('vegan dishes pass vegetarian filter (vegan implies vegetarian)', async () => {
+      const place = createMockPlace('1', 'Vegan Place');
+      // This dish is vegan but NOT marked as vegetarian - should still pass vegetarian filter
+      const veganOnlyDish = createMockDish('d1', 'Vegan Salad', { vegetarian: false, vegan: true, glutenFree: false });
+
+      const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
+
+      mockGetActiveDishesForPlace.mockResolvedValue([veganOnlyDish]);
+      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+
+      const vegetarianFilters: DietaryFilters = { vegetarian: true, vegan: false, glutenFree: false };
+      const result = await processCandidateBatch(candidates, vegetarianFilters);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].dishes).toHaveLength(1);
+      expect(result[0].dishes[0].name).toBe('Vegan Salad');
+    });
+
+    it('selects hero dish from matching dishes when available', async () => {
+      const place = createMockPlace('1', 'Hero Place');
+      const regularDish = createMockDish('d1', 'Regular Dish', { vegetarian: false, vegan: false, glutenFree: false });
+      const heroDish = { ...createMockDish('d2', 'Hero Dish', { vegetarian: false, vegan: false, glutenFree: false }), isHero: true };
+
+      const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
+
+      mockGetActiveDishesForPlace.mockResolvedValue([regularDish, heroDish]);
+      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+
+      const filters: DietaryFilters = { vegetarian: false, vegan: false, glutenFree: false };
+      const result = await processCandidateBatch(candidates, filters);
+
+      expect(result).toHaveLength(1);
+      // Hero dish should be selected
+      expect(result[0].heroDish?.name).toBe('Hero Dish');
+    });
+
+    it('filters hero dish by dietary restrictions', async () => {
+      const place = createMockPlace('1', 'Place With Heroes');
+      const nonVeganHero = { ...createMockDish('d1', 'Meat Hero', { vegetarian: false, vegan: false, glutenFree: false }), isHero: true };
+      const veganDish = createMockDish('d2', 'Vegan Side', { vegetarian: true, vegan: true, glutenFree: false });
+
+      const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
+
+      mockGetActiveDishesForPlace.mockResolvedValue([nonVeganHero, veganDish]);
+      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+
+      const veganFilters: DietaryFilters = { vegetarian: false, vegan: true, glutenFree: false };
+      const result = await processCandidateBatch(candidates, veganFilters);
+
+      expect(result).toHaveLength(1);
+      // Non-vegan hero should be filtered out, vegan dish should be selected
+      expect(result[0].heroDish?.name).toBe('Vegan Side');
       expect(result[0].dishes).toHaveLength(1);
     });
 
@@ -332,7 +383,6 @@ describe('Recommendations', () => {
         .mockResolvedValueOnce({ docs: [] }); // no dismissed places
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetHeroDishForPlace.mockResolvedValue(dish);
       mockGetPlaceHours.mockResolvedValue({ isOpen: true, closeTime: '22:00' });
 
       const result = await getNearestOpenPlace(
@@ -427,7 +477,6 @@ describe('Recommendations', () => {
         .mockResolvedValueOnce({ docs: [] }); // no dismissed
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetHeroDishForPlace.mockResolvedValue(dish);
       mockGetPlaceHours.mockResolvedValue({ isOpen: true });
 
       const result = await getRecommendationQueue(

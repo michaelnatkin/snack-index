@@ -161,11 +161,6 @@ export async function getDish(dishId: string): Promise<Dish | null> {
 export async function createDish(
   dish: Omit<Dish, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> {
-  // If this dish is the hero, unset any existing hero for this place
-  if (dish.isHero) {
-    await unsetHeroDishForPlace(dish.placeId);
-  }
-
   const dishesRef = collection(db, 'dishes');
   const docRef = await addDoc(dishesRef, {
     ...dish,
@@ -182,14 +177,6 @@ export async function updateDish(
   dishId: string,
   updates: Partial<Omit<Dish, 'id' | 'createdAt'>>
 ): Promise<void> {
-  // If setting as hero, first unset any existing hero for this place
-  if (updates.isHero) {
-    const dish = await getDish(dishId);
-    if (dish) {
-      await unsetHeroDishForPlace(dish.placeId, dishId);
-    }
-  }
-
   const docRef = doc(db, 'dishes', dishId);
   await updateDoc(docRef, {
     ...updates,
@@ -206,31 +193,7 @@ export async function deleteDish(dishId: string): Promise<void> {
 }
 
 /**
- * Unset hero dish for a place (except for the specified dish)
- */
-async function unsetHeroDishForPlace(placeId: string, exceptDishId?: string): Promise<void> {
-  const dishesRef = collection(db, 'dishes');
-  const q = query(
-    dishesRef,
-    where('placeId', '==', placeId),
-    where('isHero', '==', true)
-  );
-  const snapshot = await getDocs(q);
-
-  const updates = snapshot.docs
-    .filter((doc) => doc.id !== exceptDishId)
-    .map((doc) =>
-      updateDoc(doc.ref, {
-        isHero: false,
-        updatedAt: serverTimestamp(),
-      })
-    );
-
-  await Promise.all(updates);
-}
-
-/**
- * Get the hero dish for a place
+ * Get the hero dish for a place (returns first one if multiple exist)
  */
 export async function getHeroDishForPlace(placeId: string): Promise<Dish | null> {
   const dishesRef = collection(db, 'dishes');
