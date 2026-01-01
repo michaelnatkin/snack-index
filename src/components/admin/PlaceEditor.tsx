@@ -9,9 +9,27 @@ import {
   updatePlace,
   deletePlace,
   getDishesForPlace,
+  getPlaceByGooglePlaceId,
+  createDish,
 } from '@/lib/places';
 import { searchPlaces, getPlaceDetails, type PlaceAutocompleteResult } from '@/lib/googlePlaces';
-import type { Dish } from '@/types/models';
+import type { Dish, DietaryFilters } from '@/types/models';
+
+interface NewDishForm {
+  id: string;
+  name: string;
+  description: string;
+  isHero: boolean;
+  dietary: DietaryFilters;
+}
+
+const createEmptyDish = (): NewDishForm => ({
+  id: crypto.randomUUID(),
+  name: '',
+  description: '',
+  isHero: false,
+  dietary: { vegetarian: false, vegan: false, glutenFree: false },
+});
 
 export function PlaceEditor() {
   const navigate = useNavigate();
@@ -37,6 +55,12 @@ export function PlaceEditor() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceAutocompleteResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // New dishes state (for new places only)
+  const [newDishes, setNewDishes] = useState<NewDishForm[]>([]);
+
+  // Duplicate check state
+  const [duplicatePlace, setDuplicatePlace] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!isNew && placeId) {
@@ -94,8 +118,17 @@ export function PlaceEditor() {
   const handleSelectPlace = async (result: PlaceAutocompleteResult) => {
     setSearchQuery('');
     setSearchResults([]);
+    setError(null);
+    setDuplicatePlace(null);
 
     try {
+      // Check if place already exists
+      const existingPlace = await getPlaceByGooglePlaceId(result.placeId);
+      if (existingPlace) {
+        setDuplicatePlace({ id: existingPlace.id, name: existingPlace.name });
+        return;
+      }
+
       const details = await getPlaceDetails(result.placeId);
       if (details) {
         setGooglePlaceId(details.placeId);
@@ -117,6 +150,16 @@ export function PlaceEditor() {
     if (!googlePlaceId || !name) {
       setError('Please search and select a place');
       return;
+    }
+
+    // Validate new dishes have names
+    if (isNew) {
+      const dishesWithNames = newDishes.filter((d) => d.name.trim());
+      const emptyDishes = newDishes.filter((d) => !d.name.trim());
+      if (emptyDishes.length > 0 && dishesWithNames.length < newDishes.length) {
+        // Remove empty dishes silently
+        setNewDishes(dishesWithNames);
+      }
     }
 
     setSaving(true);
@@ -147,13 +190,36 @@ export function PlaceEditor() {
       }
 
       if (isNew) {
-        const newId = await createPlace(placeData);
-        navigate(`/admin/place/${newId}`, { replace: true });
+        const newPlaceId = await createPlace(placeData);
+
+        // Create dishes for the new place
+        const dishesWithNames = newDishes.filter((d) => d.name.trim());
+        for (const dish of dishesWithNames) {
+          const dishData: {
+            placeId: string;
+            name: string;
+            description?: string;
+            isHero: boolean;
+            dietary: DietaryFilters;
+            isActive: boolean;
+          } = {
+            placeId: newPlaceId,
+            name: dish.name.trim(),
+            isHero: dish.isHero,
+            dietary: dish.dietary,
+            isActive: true,
+          };
+          if (dish.description.trim()) {
+            dishData.description = dish.description.trim();
+          }
+          await createDish(dishData);
+        }
+
+        navigate('/admin');
       } else {
         await updatePlace(placeId!, placeData);
+        navigate('/admin');
       }
-
-      navigate('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save place');
     } finally {
@@ -248,6 +314,23 @@ export function PlaceEditor() {
                 ))}
               </div>
             )}
+
+            {/* Duplicate Place Warning */}
+            {duplicatePlace && (
+              <div className="mt-4 p-4 bg-paprika/10 rounded-lg border border-paprika/20">
+                <p className="text-paprika font-medium mb-2">This place already exists!</p>
+                <p className="text-sm text-charcoal mb-3">
+                  &ldquo;{duplicatePlace.name}&rdquo; is already in the database.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/admin/place/${duplicatePlace.id}`)}
+                >
+                  Edit existing place →
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -278,7 +361,7 @@ export function PlaceEditor() {
           />
         </div>
 
-        {/* Dishes Section (only for existing places) */}
+        {/* Dishes Section (for existing places) */}
         {!isNew && (
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -323,6 +406,170 @@ export function PlaceEditor() {
                       <span className="text-sage">✎</span>
                     </div>
                   </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dishes Section (for new places - inline form) */}
+        {isNew && googlePlaceId && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-charcoal">Dishes</h2>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setNewDishes([...newDishes, createEmptyDish()])}
+              >
+                + Add Dish
+              </Button>
+            </div>
+
+            {newDishes.length === 0 ? (
+              <p className="text-text-muted text-center py-4">
+                No dishes yet. Add at least one dish to get started!
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {newDishes.map((dish, index) => (
+                  <div
+                    key={dish.id}
+                    className="bg-surface rounded-lg p-4 border border-butter/30 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-text-muted">
+                        Dish {index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewDishes(newDishes.filter((d) => d.id !== dish.id))
+                        }
+                        className="text-paprika hover:text-paprika/80 text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-text-muted mb-1">
+                        Dish Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={dish.name}
+                        onChange={(e) =>
+                          setNewDishes(
+                            newDishes.map((d) =>
+                              d.id === dish.id ? { ...d, name: e.target.value } : d
+                            )
+                          )
+                        }
+                        placeholder="e.g., Kalbi Tacos"
+                        className="w-full px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-text-muted mb-1">
+                        Description (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={dish.description}
+                        onChange={(e) =>
+                          setNewDishes(
+                            newDishes.map((d) =>
+                              d.id === dish.id ? { ...d, description: e.target.value } : d
+                            )
+                          )
+                        }
+                        placeholder="What makes this dish special?"
+                        className="w-full px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={dish.isHero}
+                        onChange={(e) =>
+                          setNewDishes(
+                            newDishes.map((d) =>
+                              d.id === dish.id
+                                ? { ...d, isHero: e.target.checked }
+                                : e.target.checked
+                                ? { ...d, isHero: false }
+                                : d
+                            )
+                          )
+                        }
+                        className="w-4 h-4 rounded border-sage text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm text-charcoal">⭐ THE MOVE</span>
+                    </label>
+
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={dish.dietary.vegetarian}
+                          onChange={(e) =>
+                            setNewDishes(
+                              newDishes.map((d) =>
+                                d.id === dish.id
+                                  ? {
+                                      ...d,
+                                      dietary: { ...d.dietary, vegetarian: e.target.checked },
+                                    }
+                                  : d
+                              )
+                            )
+                          }
+                          className="w-4 h-4 rounded border-sage text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-charcoal">Vegetarian</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={dish.dietary.vegan}
+                          onChange={(e) =>
+                            setNewDishes(
+                              newDishes.map((d) =>
+                                d.id === dish.id
+                                  ? { ...d, dietary: { ...d.dietary, vegan: e.target.checked } }
+                                  : d
+                              )
+                            )
+                          }
+                          className="w-4 h-4 rounded border-sage text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-charcoal">Vegan</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={dish.dietary.glutenFree}
+                          onChange={(e) =>
+                            setNewDishes(
+                              newDishes.map((d) =>
+                                d.id === dish.id
+                                  ? {
+                                      ...d,
+                                      dietary: { ...d.dietary, glutenFree: e.target.checked },
+                                    }
+                                  : d
+                              )
+                            )
+                          }
+                          className="w-4 h-4 rounded border-sage text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-charcoal">Gluten-free</span>
+                      </label>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

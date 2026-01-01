@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { seedDatabase } from '../../lib/seed';
 import { Button } from '../ui/Button';
 import { useTestingStore } from '@/stores/testingStore';
 import { searchPlaces, getPlaceDetails } from '@/lib/googlePlaces';
 
+type Tab = 'location' | 'time';
+
 export function DevSetup() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const {
     overrideLocation,
@@ -14,6 +17,7 @@ export function DevSetup() {
     setOverrideTimeIso,
     clearOverrides,
   } = useTestingStore();
+  const [activeTab, setActiveTab] = useState<Tab>('location');
 
   const [tempLat, setTempLat] = useState(overrideLocation?.latitude?.toString() || '');
   const [tempLng, setTempLng] = useState(overrideLocation?.longitude?.toString() || '');
@@ -36,8 +40,6 @@ export function DevSetup() {
   })();
 
   const [tempTime, setTempTime] = useState(initialTempTime);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<{ placeId: string; name: string; address: string }[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -79,88 +81,70 @@ export function DevSetup() {
     }
   };
 
-  const handleSeed = async () => {
-    if (!user) {
-      setMessage('Please sign in first');
-      setStatus('error');
-      return;
-    }
-
-    setStatus('loading');
-    setMessage('Seeding database...');
-
-    try {
-      await seedDatabase(user.id, user.email || 'unknown');
-      setStatus('success');
-      setMessage('Database seeded! You are now an admin. Refresh the page to see admin access.');
-    } catch (error) {
-      console.error('Seed error:', error);
-      setStatus('error');
-      setMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-cream-50 flex flex-col items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-lg p-8 max-w-[28rem] w-full text-center">
-        <h1 className="text-2xl font-display font-bold text-warm-900 mb-4">
-          🛠️ Dev Setup
-        </h1>
-        
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-surface border-b border-butter/30 px-4 py-4 sticky top-0 z-10">
+        <div className="max-w-[42rem] mx-auto flex items-center justify-between">
+          <button
+            onClick={() => navigate('/admin')}
+            className="text-2xl"
+            aria-label="Back"
+          >
+            ←
+          </button>
+          <h1 className="text-xl font-bold text-charcoal font-display">Testing Overrides</h1>
+          <div className="w-8" /> {/* Spacer */}
+        </div>
+      </header>
+
+      <div className="max-w-[42rem] mx-auto px-4 py-6">
         {user ? (
-          <>
-            <p className="text-warm-600 mb-2">Signed in as:</p>
-            <p className="text-warm-900 font-medium mb-6">{user.email}</p>
-          </>
+          <p className="text-sm text-text-muted mb-4">Signed in as: {user.email}</p>
         ) : (
-          <p className="text-warm-600 mb-6">Not signed in. Go to / to sign in first.</p>
+          <p className="text-paprika text-sm mb-4">Not signed in. Go to / to sign in first.</p>
         )}
 
-        <p className="text-warm-600 mb-6">
-          This will make you an admin and add sample Seattle snack spots to the database.
+        <p className="text-sm text-text-muted mb-6">
+          Set a fake location and time for admin testing. Stored in localStorage only (not saved to Firestore).
         </p>
 
-        <Button
-          onClick={handleSeed}
-          disabled={!user || status === 'loading' || status === 'success'}
-          className="w-full mb-4"
-        >
-          {status === 'loading' ? 'Seeding...' : 'Seed Database'}
-        </Button>
-
-        {message && (
-          <p className={`text-sm ${status === 'error' ? 'text-red-600' : status === 'success' ? 'text-green-600' : 'text-warm-600'}`}>
-            {message}
-          </p>
-        )}
-
-        {status === 'success' && (
-          <Button
-            variant="secondary"
-            onClick={() => window.location.href = '/'}
-            className="w-full mt-4"
+        {/* Tabs */}
+        <div className="flex border-b border-butter/30 mb-6">
+          <button
+            onClick={() => setActiveTab('location')}
+            className={`flex-1 py-3 text-center font-medium transition-colors ${
+              activeTab === 'location'
+                ? 'text-charcoal border-b-2 border-primary'
+                : 'text-text-muted hover:text-charcoal'
+            }`}
           >
-            Go to App →
-          </Button>
-        )}
+            📍 Location
+          </button>
+          <button
+            onClick={() => setActiveTab('time')}
+            className={`flex-1 py-3 text-center font-medium transition-colors ${
+              activeTab === 'time'
+                ? 'text-charcoal border-b-2 border-primary'
+                : 'text-text-muted hover:text-charcoal'
+            }`}
+          >
+            🕐 Time
+          </button>
+        </div>
 
-        <div className="mt-10 text-left">
-          <h2 className="text-lg font-display font-bold text-warm-900 mb-2">
-            🧪 Testing overrides (local only)
-          </h2>
-          <p className="text-sm text-warm-600 mb-4">
-            Set a fake location and time for admin testing. Stored in localStorage only (not saved to Firestore).
-          </p>
-
-          <div className="space-y-3">
-            <div className="border border-butter rounded-lg p-3 bg-cream-50 space-y-3">
-              <p className="text-sm font-medium text-warm-900">Search a place to set fake location</p>
+        {/* Location Tab */}
+        {activeTab === 'location' && (
+          <div className="space-y-4">
+            {/* Place Search */}
+            <div className="bg-surface rounded-lg p-4 border border-butter/30 space-y-3">
+              <p className="text-sm font-medium text-charcoal">Search a place to set fake location</p>
               <div className="flex gap-2 flex-col sm:flex-row">
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="Temple Pastries"
                 />
                 <Button
@@ -171,7 +155,7 @@ export function DevSetup() {
                   {searchLoading ? 'Searching...' : 'Search'}
                 </Button>
               </div>
-              {searchError && <p className="text-sm text-red-600">{searchError}</p>}
+              {searchError && <p className="text-sm text-paprika">{searchError}</p>}
               {searchResults.length > 0 && (
                 <div className="space-y-2">
                   {searchResults.map((r) => (
@@ -179,64 +163,57 @@ export function DevSetup() {
                       key={r.placeId}
                       type="button"
                       onClick={() => handleUsePlaceResult(r.placeId, r.name)}
-                      className="w-full text-left px-3 py-2 rounded-lg border border-butter bg-white hover:border-primary"
+                      className="w-full text-left px-3 py-2 rounded-lg border border-butter bg-surface hover:border-primary"
                     >
-                      <p className="font-medium text-warm-900">{r.name}</p>
-                      <p className="text-sm text-warm-600">{r.address}</p>
+                      <p className="font-medium text-charcoal">{r.name}</p>
+                      <p className="text-sm text-text-muted">{r.address}</p>
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-warm-900 mb-1">Latitude</label>
-                <input
-                  type="number"
-                  value={tempLat}
-                  onChange={(e) => setTempLat(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="47.6"
-                />
+            {/* Manual Coordinates */}
+            <div className="bg-surface rounded-lg p-4 border border-butter/30 space-y-3">
+              <p className="text-sm font-medium text-charcoal">Or enter coordinates manually</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-text-muted mb-1">Latitude</label>
+                  <input
+                    type="number"
+                    value={tempLat}
+                    onChange={(e) => setTempLat(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="47.6"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-text-muted mb-1">Longitude</label>
+                  <input
+                    type="number"
+                    value={tempLng}
+                    onChange={(e) => setTempLng(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="-122.3"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-warm-900 mb-1">Longitude</label>
+                <label className="block text-sm text-text-muted mb-1">Label (optional)</label>
                 <input
-                  type="number"
-                  value={tempLng}
-                  onChange={(e) => setTempLng(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="-122.3"
+                  type="text"
+                  value={tempLabel}
+                  onChange={(e) => setTempLabel(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="e.g., Temple Pastries"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-warm-900 mb-1">Label (optional)</label>
-              <input
-                type="text"
-                value={tempLabel}
-                onChange={(e) => setTempLabel(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="e.g., Temple Pastries"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-warm-900 mb-1">Fake current time</label>
-              <input
-                type="datetime-local"
-                value={tempTime}
-                onChange={(e) => setTempTime(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-butter bg-white focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-
+            {/* Quick Actions */}
             <div className="flex flex-wrap gap-3">
               <Button
                 size="sm"
-                variant="secondary"
                 onClick={() => {
                   const lat = parseFloat(tempLat);
                   const lng = parseFloat(tempLng);
@@ -251,12 +228,66 @@ export function DevSetup() {
                   }
                 }}
               >
-                Apply location
+                Apply Location
               </Button>
-
               <Button
                 size="sm"
                 variant="secondary"
+                onClick={() => {
+                  setTempLat('47.5993');
+                  setTempLng('-122.3031');
+                  setTempLabel('Temple Pastries');
+                  setOverrideLocation({
+                    latitude: 47.5993,
+                    longitude: -122.3031,
+                    label: 'Temple Pastries',
+                  });
+                }}
+              >
+                Use Temple Pastries
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setTempLat('');
+                  setTempLng('');
+                  setTempLabel('');
+                  setOverrideLocation(undefined);
+                }}
+              >
+                Clear Location
+              </Button>
+            </div>
+
+            {/* Current Status */}
+            <div className="bg-cream/50 rounded-lg p-4 border border-butter/30">
+              <p className="text-sm text-charcoal">
+                <span className="font-medium">Current override location:</span>{' '}
+                {overrideLocation
+                  ? `${overrideLocation.latitude}, ${overrideLocation.longitude}${overrideLocation.label ? ` (${overrideLocation.label})` : ''}`
+                  : 'none'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Time Tab */}
+        {activeTab === 'time' && (
+          <div className="space-y-4">
+            <div className="bg-surface rounded-lg p-4 border border-butter/30 space-y-3">
+              <p className="text-sm font-medium text-charcoal">Set fake current time</p>
+              <input
+                type="datetime-local"
+                value={tempTime}
+                onChange={(e) => setTempTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                size="sm"
                 onClick={() => {
                   if (!tempTime) {
                     setOverrideTimeIso(undefined);
@@ -270,46 +301,45 @@ export function DevSetup() {
                   setOverrideTimeIso(asDate.toISOString());
                 }}
               >
-                Apply time
+                Apply Time
               </Button>
-
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => {
-                  setTempLat('');
-                  setTempLng('');
-                  setTempLabel('');
                   setTempTime('');
-                  clearOverrides();
+                  setOverrideTimeIso(undefined);
                 }}
               >
-                Clear overrides
-              </Button>
-
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setTempLat('47.5993');
-                  setTempLng('-122.3031');
-                  setTempLabel('Temple Pastries');
-                  setOverrideLocation({
-                    latitude: 47.5993,
-                    longitude: -122.3031,
-                    label: 'Temple Pastries',
-                  });
-                }}
-              >
-                Use Temple Pastries (Seattle)
+                Clear Time
               </Button>
             </div>
 
-            <div className="text-sm text-warm-600">
-              <p>Current override location: {overrideLocation ? `${overrideLocation.latitude}, ${overrideLocation.longitude} ${overrideLocation.label ? `(${overrideLocation.label})` : ''}` : 'none'}</p>
-              <p>Current override time: {overrideTimeIso ? new Date(overrideTimeIso).toLocaleString() : 'none'}</p>
+            {/* Current Status */}
+            <div className="bg-cream/50 rounded-lg p-4 border border-butter/30">
+              <p className="text-sm text-charcoal">
+                <span className="font-medium">Current override time:</span>{' '}
+                {overrideTimeIso ? new Date(overrideTimeIso).toLocaleString() : 'none'}
+              </p>
             </div>
           </div>
+        )}
+
+        {/* Clear All Button */}
+        <div className="mt-8">
+          <Button
+            variant="ghost"
+            className="w-full text-paprika hover:bg-paprika/10"
+            onClick={() => {
+              setTempLat('');
+              setTempLng('');
+              setTempLabel('');
+              setTempTime('');
+              clearOverrides();
+            }}
+          >
+            Clear All Overrides
+          </Button>
         </div>
       </div>
     </div>

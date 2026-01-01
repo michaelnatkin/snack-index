@@ -1,8 +1,8 @@
 Family launch
 * need a screen for when we there are no more places to show (also load more if we can)
 * details screen is ugly
+* doesnt handle "the move" correctly when none is specificed
 * favicon
-* moving forward to next card when I get directios - should stay on same card
 * seems to be celebrating 5 times too often
 * bad share icon
 
@@ -11,10 +11,6 @@ Family launch
 * how does "the move" work with dietary filters
 
 * add a rating for places - in a pinch / tasty / worth a special trip
-
-* back button from test overrides
-* on admi page whe adding a place, allow me to add dishes as well
-* on admin page don't let me add an existing place or dish
 
 * get cursor to be always running closed loop
 

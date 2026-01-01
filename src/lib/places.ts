@@ -248,3 +248,36 @@ export async function getHeroDishForPlace(placeId: string): Promise<Dish | null>
   return { id: doc.id, ...doc.data() } as Dish;
 }
 
+/**
+ * Check if a place already exists by Google Place ID
+ */
+export async function getPlaceByGooglePlaceId(googlePlaceId: string): Promise<Place | null> {
+  const placesRef = collection(db, 'places');
+  const q = query(placesRef, where('googlePlaceId', '==', googlePlaceId));
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) return null;
+
+  const docSnap = snapshot.docs[0];
+  return { id: docSnap.id, ...docSnap.data() } as Place;
+}
+
+/**
+ * Check if a dish already exists for a place by name
+ */
+export async function getDishByNameForPlace(placeId: string, name: string): Promise<Dish | null> {
+  const dishesRef = collection(db, 'dishes');
+  const q = query(dishesRef, where('placeId', '==', placeId));
+  const snapshot = await getDocs(q);
+
+  // Case-insensitive comparison
+  const normalizedName = name.trim().toLowerCase();
+  const matchingDoc = snapshot.docs.find(
+    (d) => (d.data().name as string).trim().toLowerCase() === normalizedName
+  );
+
+  if (!matchingDoc) return null;
+
+  return { id: matchingDoc.id, ...matchingDoc.data() } as Dish;
+}
+

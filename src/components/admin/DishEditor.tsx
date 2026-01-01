@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { getDish, createDish, updateDish, deleteDish } from '@/lib/places';
+import { getDish, createDish, updateDish, deleteDish, getDishByNameForPlace } from '@/lib/places';
 import type { DietaryFilters } from '@/types/models';
 
 export function DishEditor() {
@@ -73,6 +73,16 @@ export function DishEditor() {
     setError(null);
 
     try {
+      // Check for duplicate dish name when creating new
+      if (isNew) {
+        const existingDish = await getDishByNameForPlace(placeId, name.trim());
+        if (existingDish) {
+          setError(`A dish named "${existingDish.name}" already exists for this place.`);
+          setSaving(false);
+          return;
+        }
+      }
+
       const desc = description.trim();
       const dishData: {
         placeId: string;
