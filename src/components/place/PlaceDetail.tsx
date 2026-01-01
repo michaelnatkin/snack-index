@@ -29,6 +29,7 @@ export function PlaceDetail() {
   const [visitCount, setVisitCount] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [expandedDishIds, setExpandedDishIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!placeId) return;
@@ -49,7 +50,8 @@ export function PlaceDetail() {
 
         setPlace(placeData);
         setHeroDish(hero);
-        setOtherDishes(dishes.filter((d) => !d.isHero));
+        // Show all dishes except the one chosen as "THE MOVE"
+        setOtherDishes(dishes.filter((d) => d.id !== hero?.id));
 
         // Check if open
         try {
@@ -156,6 +158,18 @@ export function PlaceDetail() {
       setSaveToast('Could not save. Try again.');
       setTimeout(() => setSaveToast(null), 2500);
     }
+  };
+
+  const toggleDishExpanded = (dishId: string) => {
+    setExpandedDishIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(dishId)) {
+        next.delete(dishId);
+      } else {
+        next.add(dishId);
+      }
+      return next;
+    });
   };
 
   // Filter dishes by user's dietary preferences
@@ -280,28 +294,53 @@ export function PlaceDetail() {
           {filteredOtherDishes.length > 0 && (
             <div className="glass-panel p-5">
               <h2 className="text-sm font-semibold text-sage uppercase tracking-wide mb-3">
-                Also good
+                Also Great
               </h2>
               <div className="space-y-3">
-                {filteredOtherDishes.map((dish) => (
-                  <div
-                    key={dish.id}
-                    className="rounded-lg border border-butter/40 bg-white/80 px-3 py-2 shadow-sm"
-                  >
-                    <h3 className="font-medium text-charcoal">{dish.name}</h3>
-                    <div className="flex gap-2 mt-1">
-                      {dish.dietary.vegetarian && (
-                        <span className="text-xs text-success">VEG</span>
+                {filteredOtherDishes.map((dish) => {
+                  const isExpanded = expandedDishIds.has(dish.id);
+                  const hasDescription = !!dish.description;
+                  return (
+                    <div
+                      key={dish.id}
+                      className={`rounded-lg border border-butter/40 bg-white/80 px-3 py-2 shadow-sm ${hasDescription ? 'cursor-pointer hover:bg-white/90 transition-colors' : ''}`}
+                      onClick={hasDescription ? () => toggleDishExpanded(dish.id) : undefined}
+                      role={hasDescription ? 'button' : undefined}
+                      tabIndex={hasDescription ? 0 : undefined}
+                      onKeyDown={hasDescription ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleDishExpanded(dish.id);
+                        }
+                      } : undefined}
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-charcoal">{dish.name}</h3>
+                        {hasDescription && (
+                          <span className="text-text-muted text-sm transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                            ▼
+                          </span>
+                        )}
+                      </div>
+                      {hasDescription && (
+                        <p className={`text-text-muted text-sm mt-1 ${isExpanded ? '' : 'line-clamp-1'}`}>
+                          {dish.description}
+                        </p>
                       )}
-                      {dish.dietary.vegan && (
-                        <span className="text-xs text-success">V</span>
-                      )}
-                      {dish.dietary.glutenFree && (
-                        <span className="text-xs text-honey">GF</span>
-                      )}
+                      <div className="flex gap-2 mt-1">
+                        {dish.dietary.vegetarian && (
+                          <span className="text-xs text-success">VEG</span>
+                        )}
+                        {dish.dietary.vegan && (
+                          <span className="text-xs text-success">V</span>
+                        )}
+                        {dish.dietary.glutenFree && (
+                          <span className="text-xs text-honey">GF</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
