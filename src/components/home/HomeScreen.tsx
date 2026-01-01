@@ -11,10 +11,13 @@ import { NotInAreaState } from './NotInAreaState';
 import { useUserStore } from '@/stores/userStore';
 import { requestLocation, getLocationPermissionState } from '@/lib/location';
 import { Button } from '@/components/ui/Button';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import {
-  getRecommendationQueue,
+  getNearbyEligiblePlaces,
+  processCandidateBatch,
   getNearestOpenPlace,
   type PlaceRecommendation,
+  type PlaceWithDistance,
 } from '@/lib/recommendations';
 import { useTestingStore } from '@/stores/testingStore';
 import { markPlaceVisited, dismissPlace } from '@/lib/interactions';
@@ -43,13 +46,16 @@ export function HomeScreen() {
   const [nextToOpen, setNextToOpen] = useState<{ place: Place; opensIn: string }>();
   const [previewPlaces, setPreviewPlaces] = useState<Place[]>([]);
 
-  // Data state
-  const [recommendations, setRecommendations] = useState<PlaceRecommendation[]>([]);
+  // Data state - two-tier queue system
+  const [candidateQueue, setCandidateQueue] = useState<PlaceWithDistance[]>([]);
+  const [readyQueue, setReadyQueue] = useState<PlaceRecommendation[]>([]);
+  const [candidateOffset, setCandidateOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [resultType, setResultType] = useState<'loading' | 'recommendations' | 'nothing_open' | 'not_in_area' | 'all_seen' | 'needs_location_prompt'>('loading');
   const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Load recommendations with given coordinates
+  // Load recommendations with given coordinates using two-tier queue
   const loadRecommendationsWithCoords = useCallback(async (coords: { latitude: number; longitude: number }) => {
     setUserCoordinates(coords);
     const nowOverride = overrideTimeIso ? new Date(overrideTimeIso) : undefined;
@@ -60,7 +66,7 @@ export function HomeScreen() {
     };
 
     try {
-      // Determine high-level state
+      // First, check if there are any open places at all
       const nearest = await getNearestOpenPlace(
         coords,
         dietaryFilters,
@@ -83,19 +89,35 @@ export function HomeScreen() {
         return;
       }
 
-      const recs = await getRecommendationQueue(
+      // Get all eligible places (candidate queue)
+      const eligibleResult = await getNearbyEligiblePlaces(
         coords,
-        dietaryFilters,
         user?.id || '',
-        10,
-        Infinity,
-        nowOverride
+        Infinity
       );
 
-      if (recs.length === 0) {
+      if (eligibleResult.type === 'not_in_area') {
+        setPreviewPlaces(eligibleResult.previewPlaces || []);
+        setResultType('not_in_area');
+        setLoading(false);
+        return;
+      }
+
+      const allCandidates = eligibleResult.places;
+      setCandidateQueue(allCandidates);
+
+      // Process initial batch (20 candidates to get ~10 open places)
+      const initialBatchSize = Math.min(allCandidates.length, 20);
+      const initialBatch = allCandidates.slice(0, initialBatchSize);
+      const initialReady = await processCandidateBatch(initialBatch, dietaryFilters, nowOverride);
+
+      setCandidateOffset(initialBatchSize);
+      setReadyQueue(initialReady);
+      setCurrentIndex(0);
+
+      if (initialReady.length === 0) {
         setResultType('nothing_open');
       } else {
-        setRecommendations(recs);
         setResultType('recommendations');
       }
     } catch (err) {
@@ -179,13 +201,27 @@ export function HomeScreen() {
 
   // Show swipe tutorial after dietary sheet dismissed
   useEffect(() => {
-    if (user && !user.onboarding.hasSeenSwipeTutorial && !showDietarySheet && !loading && recommendations.length > 0) {
+    if (user && !user.onboarding.hasSeenSwipeTutorial && !showDietarySheet && !loading && readyQueue.length > 0) {
       const timer = setTimeout(() => {
         setShowSwipeTutorial(true);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [user, showDietarySheet, loading, recommendations.length]);
+  }, [user, showDietarySheet, loading, readyQueue.length]);
+
+  // Auto-advance when loading finishes and we have new items (user was waiting at end)
+  const prevReadyLengthRef = useRef(readyQueue.length);
+  useEffect(() => {
+    // If we were at the end and new items were added, advance to the next one
+    if (
+      readyQueue.length > prevReadyLengthRef.current &&
+      currentIndex === prevReadyLengthRef.current - 1 &&
+      resultType === 'recommendations'
+    ) {
+      setCurrentIndex((i) => i + 1);
+    }
+    prevReadyLengthRef.current = readyQueue.length;
+  }, [readyQueue.length, currentIndex, resultType]);
 
   const maybeShowSwipeNudge = useCallback((nextCount: number) => {
     if (
@@ -210,12 +246,51 @@ export function HomeScreen() {
     }
   }, [updateOnboarding]);
 
-  const currentRecommendation = recommendations[currentIndex];
+  const currentRecommendation = readyQueue[currentIndex];
+
+  // Load more candidates when nearing end of ready queue
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return; // Prevent duplicate calls
+    if (candidateOffset >= candidateQueue.length) return; // No more candidates
+
+    setLoadingMore(true);
+    const nowOverride = overrideTimeIso ? new Date(overrideTimeIso) : undefined;
+    const dietaryFilters = user?.preferences.dietaryFilters || {
+      vegetarian: false,
+      vegan: false,
+      glutenFree: false,
+    };
+
+    try {
+      const batchSize = Math.min(10, candidateQueue.length - candidateOffset);
+      const batch = candidateQueue.slice(candidateOffset, candidateOffset + batchSize);
+      const newReady = await processCandidateBatch(batch, dietaryFilters, nowOverride);
+
+      setCandidateOffset((prev) => prev + batchSize);
+      setReadyQueue((prev) => [...prev, ...newReady]);
+    } catch (err) {
+      console.error('Failed to load more recommendations:', err);
+    }
+
+    setLoadingMore(false);
+  }, [loadingMore, candidateOffset, candidateQueue, overrideTimeIso, user?.preferences.dietaryFilters]);
 
   const goToNext = () => {
-    if (currentIndex < recommendations.length - 1) {
+    const hasMoreCandidates = candidateOffset < candidateQueue.length;
+    const nearingEnd = currentIndex >= readyQueue.length - 3;
+
+    // Trigger load more when nearing end and candidates remain
+    if (nearingEnd && hasMoreCandidates && !loadingMore) {
+      loadMore();
+    }
+
+    if (currentIndex < readyQueue.length - 1) {
       setCurrentIndex((i) => i + 1);
-    } else {
+    } else if (loadingMore) {
+      // At exact end while loading - stay at current position (will advance when ready)
+      // The loading state will show a spinner
+    } else if (!hasMoreCandidates) {
+      // Truly at the end - no more candidates
       setResultType('all_seen');
     }
   };
@@ -354,6 +429,16 @@ export function HomeScreen() {
             onSwipeUp={handleSwipeUp}
           />
 
+          {/* Loading more indicator - shows when at end while fetching more */}
+          {loadingMore && currentIndex >= readyQueue.length - 1 && (
+            <div className="fixed inset-0 bg-cream/80 flex items-center justify-center z-30">
+              <div className="flex flex-col items-center gap-3">
+                <LoadingSpinner size="lg" />
+                <p className="text-text-muted text-sm">Finding more snacks...</p>
+              </div>
+            </div>
+          )}
+
           {/* Navigation chevrons */}
           <button
             aria-label="Previous"
@@ -369,8 +454,8 @@ export function HomeScreen() {
           <button
             aria-label="Next"
             onClick={goToNext}
-            disabled={currentIndex >= recommendations.length - 1}
-            className={`nav-chevron nav-chevron--right ${currentIndex >= recommendations.length - 1 ? 'nav-chevron--disabled' : ''}`}
+            disabled={currentIndex >= readyQueue.length - 1 && candidateOffset >= candidateQueue.length && !loadingMore}
+            className={`nav-chevron nav-chevron--right ${currentIndex >= readyQueue.length - 1 && candidateOffset >= candidateQueue.length && !loadingMore ? 'nav-chevron--disabled' : ''}`}
           >
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />

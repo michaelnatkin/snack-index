@@ -34,7 +34,7 @@ const DEFAULT_SEARCH_RADIUS_MILES = 20;
 const MAX_SEARCH_RADIUS_MILES = 50;
 const MILES_TO_METERS = 1609.34;
 
-type PlaceWithDistance = { place: Place; distance: number };
+export type PlaceWithDistance = { place: Place; distance: number };
 
 function resolveSearchRadius(maxDistanceMiles: number): number {
   if (!Number.isFinite(maxDistanceMiles)) return DEFAULT_SEARCH_RADIUS_MILES;
@@ -83,6 +83,79 @@ async function getNearbyActivePlaces(
   });
 
   return Array.from(seen.values()).sort((a, b) => a.distance - b.distance);
+}
+
+/**
+ * Get all nearby eligible places (not dismissed) sorted by distance.
+ * This is the "candidate queue" - places that haven't been processed yet.
+ * Does NOT check open status or fetch dishes.
+ */
+export async function getNearbyEligiblePlaces(
+  userLocation: Coordinates,
+  userId: string,
+  maxDistanceMiles: number = Infinity
+): Promise<{ type: 'success'; places: PlaceWithDistance[] } | { type: 'not_in_area'; previewPlaces: Place[] }> {
+  // Check if user is in Seattle area
+  if (!isInSeattleArea(userLocation)) {
+    const previewPlaces = await getActivePlaces();
+    return {
+      type: 'not_in_area',
+      previewPlaces: previewPlaces.slice(0, 6),
+    };
+  }
+
+  // Fetch places and dismissed IDs in parallel
+  const [placesWithDistance, dismissedPlaceIds] = await Promise.all([
+    getNearbyActivePlaces(userLocation, maxDistanceMiles).then(async (places) => {
+      if (places.length === 0) {
+        const allPlaces = await getActivePlaces();
+        const radiusMiles = resolveSearchRadius(maxDistanceMiles);
+        return allPlaces
+          .map((place) => ({
+            place,
+            distance: calculateDistance(userLocation, {
+              latitude: place.latitude,
+              longitude: place.longitude,
+            }),
+          }))
+          .filter(({ distance }) => distance <= radiusMiles)
+          .sort((a, b) => a.distance - b.distance);
+      }
+      return places;
+    }),
+    getDismissedPlaceIds(userId),
+  ]);
+
+  // Filter out dismissed places
+  const eligiblePlaces = placesWithDistance.filter(
+    ({ place }) => !dismissedPlaceIds.has(place.id)
+  );
+
+  return { type: 'success', places: eligiblePlaces };
+}
+
+/**
+ * Process a batch of candidate places to get ready-to-display recommendations.
+ * Checks open status, fetches dishes, and filters by dietary preferences.
+ * Returns only places that are open and have matching dishes.
+ */
+export async function processCandidateBatch(
+  candidates: PlaceWithDistance[],
+  dietaryFilters: DietaryFilters,
+  currentTimeOverride?: Date
+): Promise<PlaceRecommendation[]> {
+  if (candidates.length === 0) return [];
+
+  const results = await Promise.all(
+    candidates.map(({ place, distance }) =>
+      processPlaceForRecommendation(place, distance, dietaryFilters, currentTimeOverride)
+    )
+  );
+
+  // Filter out nulls (closed or no matching dishes) and sort by distance
+  return results
+    .filter((r): r is PlaceRecommendation => r !== null)
+    .sort((a, b) => a.distance - b.distance);
 }
 
 /**

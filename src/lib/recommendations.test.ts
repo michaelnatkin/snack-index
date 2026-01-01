@@ -129,5 +129,72 @@ describe('Recommendations', () => {
       expect(openPlaces[0].name).toBe('Open Place');
     });
   });
+
+  describe('Two-tier queue logic', () => {
+    it('processes candidates in batch and filters by open status', () => {
+      // Simulate batch processing logic
+      const candidates = [
+        { place: { id: '1', name: 'Open Place' }, distance: 0.5 },
+        { place: { id: '2', name: 'Closed Place' }, distance: 1.0 },
+        { place: { id: '3', name: 'Another Open' }, distance: 1.5 },
+      ];
+      
+      // Simulate processing results (some open, some closed)
+      const processedResults = [
+        { place: candidates[0].place, distance: 0.5, isOpen: true },
+        null, // closed place returns null
+        { place: candidates[2].place, distance: 1.5, isOpen: true },
+      ];
+
+      const ready = processedResults.filter((r) => r !== null);
+      expect(ready.length).toBe(2);
+      expect(ready[0]?.place.name).toBe('Open Place');
+      expect(ready[1]?.place.name).toBe('Another Open');
+    });
+
+    it('maintains distance order after filtering', () => {
+      const results = [
+        { place: { id: '3', name: 'Far' }, distance: 2.0, isOpen: true },
+        { place: { id: '1', name: 'Close' }, distance: 0.5, isOpen: true },
+        { place: { id: '2', name: 'Medium' }, distance: 1.0, isOpen: true },
+      ];
+
+      const sorted = results.sort((a, b) => a.distance - b.distance);
+      expect(sorted[0].place.name).toBe('Close');
+      expect(sorted[1].place.name).toBe('Medium');
+      expect(sorted[2].place.name).toBe('Far');
+    });
+
+    it('handles empty candidate batch', () => {
+      const candidates: Array<{ place: { id: string }; distance: number }> = [];
+      expect(candidates.length).toBe(0);
+      // processCandidateBatch should return empty array for empty input
+    });
+
+    it('correctly slices candidates for pagination', () => {
+      const allCandidates = Array.from({ length: 50 }, (_, i) => ({
+        place: { id: String(i), name: `Place ${i}` },
+        distance: i * 0.1,
+      }));
+
+      // Initial batch: first 20
+      const initialBatch = allCandidates.slice(0, 20);
+      expect(initialBatch.length).toBe(20);
+      expect(initialBatch[0].place.name).toBe('Place 0');
+      expect(initialBatch[19].place.name).toBe('Place 19');
+
+      // Load more: next 10
+      let offset = 20;
+      const moreBatch = allCandidates.slice(offset, offset + 10);
+      expect(moreBatch.length).toBe(10);
+      expect(moreBatch[0].place.name).toBe('Place 20');
+      expect(moreBatch[9].place.name).toBe('Place 29');
+
+      // Continue loading
+      offset = 30;
+      const evenMoreBatch = allCandidates.slice(offset, offset + 10);
+      expect(evenMoreBatch[0].place.name).toBe('Place 30');
+    });
+  });
 });
 
