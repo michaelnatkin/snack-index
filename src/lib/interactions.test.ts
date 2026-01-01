@@ -81,41 +81,7 @@ describe('getCelebrationMessage', () => {
   });
 });
 
-describe('Interaction types', () => {
-  it('defines favorited interaction correctly', () => {
-    const interaction = {
-      userId: 'user-1',
-      placeId: 'place-1',
-      favorited: true,
-      favoritedAt: new Date(),
-    };
-
-    expect(interaction.favorited).toBe(true);
-    expect(interaction.favoritedAt).toBeInstanceOf(Date);
-  });
-
-  it('defines visited interaction correctly', () => {
-    const interaction = {
-      userId: 'user-1',
-      placeId: 'place-1',
-      visited: true,
-      visitedAt: new Date(),
-    };
-
-    expect(interaction.visited).toBe(true);
-    expect(interaction.visitedAt).toBeInstanceOf(Date);
-  });
-
-  it('defines dismissed interaction correctly', () => {
-    const interaction = {
-      userId: 'user-1',
-      placeId: 'place-1',
-      dismissed: true,
-      dismissedAt: new Date(),
-    };
-
-    expect(interaction.dismissed).toBe(true);
-    expect(interaction.dismissedAt).toBeInstanceOf(Date);
-  });
-});
+// Note: Interaction type structure is enforced by TypeScript types in models.ts
+// Actual interaction functions (markPlaceVisited, dismissPlace, etc.) would need
+// integration tests with Firestore emulator to test properly
 
