@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { CelebrationModal } from '@/components/home/CelebrationModal';
 import { getPlace, getActiveDishesForPlace, getHeroDishForPlace } from '@/lib/places';
 import { getPlaceHours, getGoogleMapsUrl, getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
-import { markPlaceVisited, favoritePlace } from '@/lib/interactions';
+import { markPlaceVisited, favoritePlace, isMilestoneVisit } from '@/lib/interactions';
 import { formatDistance, calculateDistance } from '@/lib/location';
 import { useUserStore } from '@/stores/userStore';
 import type { Place, Dish } from '@/types/models';
@@ -98,35 +97,46 @@ export function PlaceDetail() {
     };
   }, [place?.googlePlaceId]);
 
-  const handleGetDirections = async () => {
+  const handleNavigate = async () => {
     if (!place || !user) return;
 
     try {
       const count = await markPlaceVisited(user.id, place.id);
       setVisitCount(count);
-      setShowCelebration(true);
+      // Only celebrate on milestone visits
+      if (isMilestoneVisit(count)) {
+        setShowCelebration(true);
+      } else {
+        // No celebration - go directly to directions
+        openDirections();
+      }
     } catch (err) {
       console.error('Failed to mark visited:', err);
+      // Still open directions even if tracking fails
+      openDirections();
     }
+  };
+
+  const openDirections = () => {
+    if (!place) return;
+    const origin = user?.lastKnownLocation
+      ? {
+          latitude: user.lastKnownLocation.latitude,
+          longitude: user.lastKnownLocation.longitude,
+        }
+      : undefined;
+    window.open(
+      getGoogleMapsUrl(place.googlePlaceId, origin, {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      }),
+      '_blank'
+    );
   };
 
   const handleCelebrationDismiss = () => {
     setShowCelebration(false);
-    if (place) {
-      const origin = user?.lastKnownLocation
-        ? {
-            latitude: user.lastKnownLocation.latitude,
-            longitude: user.lastKnownLocation.longitude,
-          }
-        : undefined;
-      window.open(
-        getGoogleMapsUrl(place.googlePlaceId, origin, {
-          latitude: place.latitude,
-          longitude: place.longitude,
-        }),
-        '_blank'
-      );
-    }
+    openDirections();
   };
 
   const handleShare = async () => {
@@ -203,63 +213,89 @@ export function PlaceDetail() {
 
   return (
     <AppLayout hideNav>
-      <div className="max-w-[42rem] mx-auto">
-        <div className="relative h-[22.5rem] rounded-b-[2rem] overflow-hidden shadow-xl bg-gradient-to-br from-honey via-paprika to-eggplant">
-          {place.imageURL || photoUrl ? (
-            <img
-              src={place.imageURL || photoUrl || ''}
-              alt={place.name}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-6xl">🍽️</div>
-          )}
-          <div className="hero-card__overlay" />
+      <div>
+        {/* Sticky header with full-width image - breaks out of shell-inner completely */}
+        <div 
+          className="sticky top-0 z-10" 
+          style={{ 
+            width: '100vw', 
+            marginLeft: 'calc(-50vw + 50%)',
+            marginTop: '-1.25rem'
+          }}
+        >
+          <div className="relative h-[22.5rem] overflow-hidden bg-gradient-to-br from-honey via-paprika to-eggplant">
+            {place.imageURL || photoUrl ? (
+              <img
+                src={place.imageURL || photoUrl || ''}
+                alt={place.name}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-6xl">🍽️</div>
+            )}
+            <div className="hero-card__overlay" />
 
-          <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-            <button
-              onClick={() => navigate(-1)}
-              className="glass-button text-xl"
-              style={{ width: '3rem', height: '3rem' }}
-              aria-label="Back"
-            >
-              ←
-            </button>
-            <div className="flex items-center gap-2">
+            <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
               <button
-                onClick={handleSave}
-                className={`glass-button text-lg ${isSaved ? 'text-paprika' : ''}`}
+                onClick={() => navigate(-1)}
+                className="glass-button text-xl"
                 style={{ width: '3rem', height: '3rem' }}
-                aria-label={isSaved ? 'Saved' : 'Save to My Snacks'}
+                aria-label="Back"
               >
-                {isSaved ? '♥' : '♡'}
+                ←
               </button>
-              <button
-                onClick={handleShare}
-                className="glass-button text-lg"
-                style={{ width: '3rem', height: '3rem' }}
-                aria-label="Share"
-              >
-                ↗️
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSave}
+                  className={`glass-button text-lg ${isSaved ? 'text-paprika' : ''}`}
+                  style={{ width: '3rem', height: '3rem' }}
+                  aria-label={isSaved ? 'Saved' : 'Save to My Snacks'}
+                >
+                  {isSaved ? '♥' : '♡'}
+                </button>
+                <button
+                  onClick={handleNavigate}
+                  className="glass-button"
+                  style={{ width: '3rem', height: '3rem' }}
+                  aria-label="Navigate"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleShare}
+                  className="glass-button"
+                  style={{ width: '3rem', height: '3rem' }}
+                  aria-label="Share"
+                >
+                  {/* iOS share icon - square with arrow pointing up */}
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="absolute bottom-6 left-6 right-6 text-white drop-shadow-lg space-y-2">
-            <h1 className="text-3xl font-bold font-display leading-tight">
-              {place.name}
-            </h1>
-            <p className="text-white/85 text-sm">
-              {distance !== undefined && `${formatDistance(distance)} · `}
-              {place.address.split(',')[0]}
-            </p>
-            <p className="text-sm">
-              {isOpen ? `Open${closeTime ? ` until ${closeTime}` : ''}` : 'Closed'}
-            </p>
+            <div className="absolute bottom-6 left-6 right-6 text-white drop-shadow-lg space-y-2">
+              <h1 className="text-3xl font-bold font-display leading-tight">
+                {place.name}
+              </h1>
+              <p className="text-white/85 text-sm">
+                {distance !== undefined && `${formatDistance(distance)} · `}
+                {place.address.split(',')[0]}
+              </p>
+              <p className="text-sm">
+                {isOpen ? `Open${closeTime ? ` until ${closeTime}` : ''}` : 'Closed'}
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="px-6 py-6 space-y-6">
+        {/* Content area - centered with max-width */}
+        <div className="max-w-[42rem] mx-auto px-6 py-6 space-y-6">
           {place.description && (
             <div className="glass-panel p-5">
               <p className="text-text-muted">{place.description}</p>
@@ -344,16 +380,6 @@ export function PlaceDetail() {
               </div>
             </div>
           )}
-
-          <div className="glass-panel p-5">
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={handleGetDirections}
-            >
-              Get Directions
-            </Button>
-          </div>
         </div>
       </div>
 

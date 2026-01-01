@@ -8,6 +8,7 @@ interface RecommendationCardProps {
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   onSwipeUp: () => void;
+  onClick: () => void;
 }
 
 export function RecommendationCard({
@@ -15,12 +16,14 @@ export function RecommendationCard({
   onSwipeLeft,
   onSwipeRight,
   onSwipeUp,
+  onClick,
 }: RecommendationCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [hasMoved, setHasMoved] = useState(false);
 
   const { place, heroDish, dishes, distance, closeTime } = recommendation;
 
@@ -44,6 +47,7 @@ export function RecommendationCard({
     const point = 'touches' in e ? e.touches[0] : e;
     setTouchStart({ x: point.clientX, y: point.clientY });
     setIsDragging(true);
+    setHasMoved(false);
   };
 
   const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
@@ -52,6 +56,11 @@ export function RecommendationCard({
     const point = 'touches' in e ? e.touches[0] : e;
     const deltaX = point.clientX - touchStart.x;
     const deltaY = point.clientY - touchStart.y;
+    
+    // Mark as moved if user drags more than a small threshold
+    if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+      setHasMoved(true);
+    }
     
     setOffset({ x: deltaX, y: Math.min(0, deltaY) });
   };
@@ -67,11 +76,15 @@ export function RecommendationCard({
       onSwipeRight();
     } else if (offset.y < -threshold) {
       onSwipeUp();
+    } else if (!hasMoved) {
+      // User tapped without significant movement - go to details
+      onClick();
     }
     
     setOffset({ x: 0, y: 0 });
     setTouchStart(null);
     setIsDragging(false);
+    setHasMoved(false);
   };
 
   const getSwipeHint = () => {

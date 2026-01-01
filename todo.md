@@ -1,14 +1,9 @@
 Family launch
-* details screen is ugly
-* back button from details screen is returning to start of snacks
-* bad share icon
 
-* doesnt handle "the move" correctly when none is specificed
 * favicon
 * seems to be celebrating 5 times too often
 
 * add more real places and edit them, ask for a focus on veg dishes - have to wait for my gemini to reset
-* how does it handle more than one dish
 
 * add a rating for places - in a pinch / tasty / worth a special trip
 

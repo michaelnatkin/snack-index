@@ -23,6 +23,10 @@ describe('isMilestoneVisit', () => {
     expect(isMilestoneVisit(1)).toBe(true);
   });
 
+  it('returns true for 5th visit', () => {
+    expect(isMilestoneVisit(5)).toBe(true);
+  });
+
   it('returns true for 10th visit', () => {
     expect(isMilestoneVisit(10)).toBe(true);
   });
@@ -39,11 +43,18 @@ describe('isMilestoneVisit', () => {
     expect(isMilestoneVisit(100)).toBe(true);
   });
 
+  it('returns true for every 50 after 100', () => {
+    expect(isMilestoneVisit(150)).toBe(true);
+    expect(isMilestoneVisit(200)).toBe(true);
+    expect(isMilestoneVisit(250)).toBe(true);
+  });
+
   it('returns false for non-milestone visits', () => {
     expect(isMilestoneVisit(2)).toBe(false);
-    expect(isMilestoneVisit(5)).toBe(false);
+    expect(isMilestoneVisit(7)).toBe(false);
     expect(isMilestoneVisit(15)).toBe(false);
     expect(isMilestoneVisit(99)).toBe(false);
+    expect(isMilestoneVisit(125)).toBe(false);
   });
 });
 
@@ -52,6 +63,12 @@ describe('getCelebrationMessage', () => {
     const message = getCelebrationMessage(1);
     expect(message).toContain('first');
     expect(message).toContain('🎉');
+  });
+
+  it('returns special message for 5th visit', () => {
+    const message = getCelebrationMessage(5);
+    expect(message).toContain('High five');
+    expect(message).toContain('✋');
   });
 
   it('returns special message for 10th visit', () => {
@@ -66,12 +83,17 @@ describe('getCelebrationMessage', () => {
 
   it('returns special message for 50th visit', () => {
     const message = getCelebrationMessage(50);
-    expect(message).toContain('Halfway');
+    expect(message).toContain('Fifty');
   });
 
   it('returns special message for 100th visit', () => {
     const message = getCelebrationMessage(100);
     expect(message).toContain('Century');
+  });
+
+  it('returns special message for every 50 after 100', () => {
+    expect(getCelebrationMessage(150)).toContain('150 places');
+    expect(getCelebrationMessage(200)).toContain('200 places');
   });
 
   it('returns ordinal message for regular visits', () => {

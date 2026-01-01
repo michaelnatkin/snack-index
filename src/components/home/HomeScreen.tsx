@@ -20,11 +20,14 @@ import {
   type PlaceWithDistance,
 } from '@/lib/recommendations';
 import { useTestingStore } from '@/stores/testingStore';
-import { markPlaceVisited, dismissPlace } from '@/lib/interactions';
+import { markPlaceVisited, dismissPlace, isMilestoneVisit } from '@/lib/interactions';
 import { getGoogleMapsUrl } from '@/lib/googlePlaces';
 import { DismissModal } from './DismissModal';
 import { CelebrationModal } from './CelebrationModal';
 import type { Place } from '@/types/models';
+
+// Session storage key for preserving navigation state
+const HOME_STATE_KEY = 'snack-index-home-state';
 
 export function HomeScreen() {
   const navigate = useNavigate();
@@ -54,6 +57,49 @@ export function HomeScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [resultType, setResultType] = useState<'loading' | 'recommendations' | 'nothing_open' | 'not_in_area' | 'all_seen' | 'needs_location_prompt'>('loading');
   const [userCoordinates, setUserCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+  
+  // Track if we've restored from session storage
+  const restoredFromSession = useRef(false);
+
+  // Restore state from session storage when navigating back
+  useEffect(() => {
+    const savedState = sessionStorage.getItem(HOME_STATE_KEY);
+    if (savedState && !restoredFromSession.current) {
+      try {
+        const parsed = JSON.parse(savedState);
+        // Only restore if we have valid data
+        if (parsed.readyQueue?.length > 0) {
+          restoredFromSession.current = true;
+          setCandidateQueue(parsed.candidateQueue || []);
+          setReadyQueue(parsed.readyQueue);
+          setCandidateOffset(parsed.candidateOffset || 0);
+          setCurrentIndex(parsed.currentIndex || 0);
+          setResultType('recommendations');
+          setUserCoordinates(parsed.userCoordinates || null);
+          setLoading(false);
+          // Clear the saved state after restoring
+          sessionStorage.removeItem(HOME_STATE_KEY);
+        }
+      } catch {
+        // Invalid saved state, ignore
+        sessionStorage.removeItem(HOME_STATE_KEY);
+      }
+    }
+  }, []);
+
+  // Save state to session storage before navigating away
+  const saveStateToSession = useCallback(() => {
+    if (readyQueue.length > 0) {
+      const stateToSave = {
+        candidateQueue,
+        readyQueue,
+        candidateOffset,
+        currentIndex,
+        userCoordinates,
+      };
+      sessionStorage.setItem(HOME_STATE_KEY, JSON.stringify(stateToSave));
+    }
+  }, [candidateQueue, readyQueue, candidateOffset, currentIndex, userCoordinates]);
 
   // Load recommendations with given coordinates using two-tier queue
   const loadRecommendationsWithCoords = useCallback(async (coords: { latitude: number; longitude: number }) => {
@@ -150,6 +196,11 @@ export function HomeScreen() {
 
   // Load recommendations on mount
   useEffect(() => {
+    // Skip loading if we've restored from session storage
+    if (restoredFromSession.current) {
+      return;
+    }
+
     const loadData = async () => {
       setLoading(true);
       
@@ -319,7 +370,10 @@ export function HomeScreen() {
     try {
       const count = await markPlaceVisited(user.id, currentRecommendation.place.id);
       setVisitCount(count);
-    setShowCelebration(true);
+      // Only celebrate on milestone visits
+      if (isMilestoneVisit(count)) {
+        setShowCelebration(true);
+      }
     setPendingMapUrl(
       getGoogleMapsUrl(
         currentRecommendation.place.googlePlaceId,
@@ -340,6 +394,7 @@ export function HomeScreen() {
 
   const handleGoToDetails = () => {
     if (currentRecommendation) {
+      saveStateToSession();
       navigate(`/place/${currentRecommendation.place.id}`);
     }
   };
@@ -427,6 +482,7 @@ export function HomeScreen() {
             onSwipeLeft={handleSwipeLeft}
             onSwipeRight={handleSwipeRight}
             onSwipeUp={handleSwipeUp}
+            onClick={handleGoToDetails}
           />
 
           {/* Loading more indicator - shows when at end while fetching more */}

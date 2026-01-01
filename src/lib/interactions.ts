@@ -71,11 +71,16 @@ export async function unfavoritePlace(userId: string, placeId: string): Promise<
 }
 
 /**
- * Mark a place as visited
+ * Mark a place as visited - only counts unique places
+ * Returns the total unique places visited count
  */
 export async function markPlaceVisited(userId: string, placeId: string): Promise<number> {
   const interactionId = `${userId}_${placeId}`;
   const docRef = doc(db, 'userPlaceInteractions', interactionId);
+  
+  // Check if this place was already visited
+  const existingDoc = await getDoc(docRef);
+  const wasAlreadyVisited = existingDoc.exists() && existingDoc.data()?.visited === true;
   
   await setDoc(docRef, {
     userId,
@@ -84,8 +89,15 @@ export async function markPlaceVisited(userId: string, placeId: string): Promise
     visitedAt: serverTimestamp(),
   }, { merge: true });
 
-  // Update user stats and return new count
-  return await incrementUserStat(userId, 'totalVisits');
+  // Only increment count for NEW unique places
+  if (!wasAlreadyVisited) {
+    return await incrementUserStat(userId, 'totalVisits');
+  }
+  
+  // Return current count without incrementing
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+  return userSnap.exists() ? (userSnap.data()?.stats?.totalVisits || 0) : 0;
 }
 
 /**
@@ -180,10 +192,14 @@ async function decrementUserStat(userId: string, stat: keyof UserStats): Promise
 }
 
 /**
- * Check if place is a milestone visit (1st, 10th, 25th, 50th, 100th)
+ * Check if place is a milestone visit
+ * Milestones: 1, 5, 10, 25, 50, 100, then every 50 after that
  */
 export function isMilestoneVisit(visitCount: number): boolean {
-  return [1, 10, 25, 50, 100].includes(visitCount);
+  if ([1, 5, 10, 25, 50, 100].includes(visitCount)) return true;
+  // Every 50 after 100 (150, 200, 250, etc.)
+  if (visitCount > 100 && visitCount % 50 === 0) return true;
+  return false;
 }
 
 /**
@@ -191,10 +207,12 @@ export function isMilestoneVisit(visitCount: number): boolean {
  */
 export function getCelebrationMessage(visitCount: number): string {
   if (visitCount === 1) return 'Your first snack spot! 🎉';
+  if (visitCount === 5) return 'High five! ✋';
   if (visitCount === 10) return 'Double digits! 🔟';
   if (visitCount === 25) return 'Quarter century of snacks! 🏆';
-  if (visitCount === 50) return 'Halfway to 100! 💪';
+  if (visitCount === 50) return 'Fifty places explored! 💪';
   if (visitCount === 100) return 'Century of snacks! 🎊';
+  if (visitCount % 50 === 0) return `${visitCount} places and counting! 🌟`;
   return `That's your ${visitCount}${getOrdinalSuffix(visitCount)} spot!`;
 }
 
