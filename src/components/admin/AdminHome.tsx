@@ -119,8 +119,15 @@ export function AdminHome() {
                     <h3 className="font-semibold text-charcoal">{place.name}</h3>
                     <p className="text-sm text-text-muted">
                       {place.dishCount} {place.dishCount === 1 ? 'dish' : 'dishes'} ·{' '}
-                      <span className={place.isActive ? 'text-success' : 'text-sage'}>
-                        {place.isActive ? 'Active' : 'Inactive'}
+                      <span className={
+                        place.status === 'ACCEPTED' ? 'text-success' :
+                        place.status === 'SUGGESTED' ? 'text-eggplant' :
+                        'text-sage'
+                      }>
+                        {place.status === 'ACCEPTED' ? 'Accepted' :
+                         place.status === 'SUGGESTED' ? 'Suggested' :
+                         place.status === 'REJECTED' ? 'Rejected' :
+                         'Permanently Closed'}
                       </span>
                     </p>
                   </div>

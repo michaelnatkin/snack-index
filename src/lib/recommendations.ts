@@ -54,7 +54,7 @@ async function getNearbyActivePlaces(
   const queries = bounds.map(([start, end]) =>
     query(
       placesRef,
-      where('isActive', '==', true),
+      where('status', '==', 'ACCEPTED'),
       orderBy('geohash'),
       startAt(start),
       endAt(end)

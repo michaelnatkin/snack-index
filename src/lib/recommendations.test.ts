@@ -64,7 +64,7 @@ const createMockPlace = (id: string, name: string, lat = 47.6, lng = -122.3): Pl
   latitude: lat,
   longitude: lng,
   geohash: 'abc123',
-  isActive: true,
+  status: 'ACCEPTED',
 } as Place);
 
 const createMockDish = (
@@ -78,7 +78,7 @@ const createMockDish = (
   description: 'A test dish',
   price: 10,
   dietary,
-  isActive: true,
+  status: 'ACCEPTED',
   isHero: false,
 } as unknown as Dish);
 
@@ -269,7 +269,7 @@ describe('Recommendations', () => {
             latitude: 47.6,
             longitude: -122.3,
             geohash: 'abc123',
-            isActive: true,
+            status: 'ACCEPTED',
           }),
         }],
       });
@@ -300,7 +300,7 @@ describe('Recommendations', () => {
                 googlePlaceId: 'google-1',
                 latitude: 47.6,
                 longitude: -122.3,
-                isActive: true,
+                status: 'ACCEPTED',
               }),
             },
             {
@@ -310,7 +310,7 @@ describe('Recommendations', () => {
                 googlePlaceId: 'google-2',
                 latitude: 47.61,
                 longitude: -122.31,
-                isActive: true,
+                status: 'ACCEPTED',
               }),
             },
           ],
@@ -376,7 +376,7 @@ describe('Recommendations', () => {
               googlePlaceId: 'google-1',
               latitude: 47.6,
               longitude: -122.3,
-              isActive: true,
+              status: 'ACCEPTED',
             }),
           }],
         })
@@ -410,7 +410,7 @@ describe('Recommendations', () => {
               googlePlaceId: 'google-1',
               latitude: 47.6,
               longitude: -122.3,
-              isActive: true,
+              status: 'ACCEPTED',
             }),
           }],
         })
@@ -459,7 +459,7 @@ describe('Recommendations', () => {
                 googlePlaceId: 'google-1',
                 latitude: 47.7,
                 longitude: -122.3,
-                isActive: true,
+                status: 'ACCEPTED',
               }),
             },
             {
@@ -469,7 +469,7 @@ describe('Recommendations', () => {
                 googlePlaceId: 'google-2',
                 latitude: 47.6,
                 longitude: -122.3,
-                isActive: true,
+                status: 'ACCEPTED',
               }),
             },
           ],
@@ -505,7 +505,7 @@ describe('Recommendations', () => {
               googlePlaceId: `google-${i}`,
               latitude: 47.6 + i * 0.01,
               longitude: -122.3,
-              isActive: true,
+              status: 'ACCEPTED',
             }),
           })),
         })
@@ -538,7 +538,7 @@ describe('Recommendations', () => {
                 googlePlaceId: 'google-1',
                 latitude: 47.6,
                 longitude: -122.3,
-                isActive: true,
+                status: 'ACCEPTED',
               }),
             },
             {
@@ -548,7 +548,7 @@ describe('Recommendations', () => {
                 googlePlaceId: 'google-2',
                 latitude: 47.61,
                 longitude: -122.3,
-                isActive: true,
+                status: 'ACCEPTED',
               }),
             },
           ],

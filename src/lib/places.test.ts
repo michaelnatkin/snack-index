@@ -53,7 +53,7 @@ describe('Places CRUD', () => {
         address: '123 Test St',
         latitude: 47.61,
         longitude: -122.33,
-        isActive: true,
+        status: 'ACCEPTED',
         createdBy: 'tester',
       });
 

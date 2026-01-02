@@ -10,7 +10,7 @@ const samplePlaces: Omit<Place, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>[
     address: "2110 N 55th St, Seattle, WA 98103",
     latitude: 47.6688,
     longitude: -122.3363,
-    isActive: true,
+    status: 'ACCEPTED',
   },
   {
     name: "General Porpoise",
@@ -18,7 +18,7 @@ const samplePlaces: Omit<Place, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>[
     address: "1020 E Union St, Seattle, WA 98122",
     latitude: 47.6129,
     longitude: -122.3186,
-    isActive: true,
+    status: 'ACCEPTED',
   },
   {
     name: "Hood Famous Cafe",
@@ -26,7 +26,7 @@ const samplePlaces: Omit<Place, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>[
     address: "2325 E Union St, Seattle, WA 98122",
     latitude: 47.6127,
     longitude: -122.3019,
-    isActive: true,
+    status: 'ACCEPTED',
   },
   {
     name: "Rachel's Ginger Beer",
@@ -34,7 +34,7 @@ const samplePlaces: Omit<Place, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>[
     address: "1530 Post Alley, Seattle, WA 98101",
     latitude: 47.6097,
     longitude: -122.3425,
-    isActive: true,
+    status: 'ACCEPTED',
   },
 ];
 
@@ -50,14 +50,14 @@ const sampleDishes: Record<string, Omit<Dish, 'id' | 'placeId' | 'createdAt' | '
       description: "Organic, vegan donut with maple glaze and cinnamon",
       isHero: true,
       dietary: vegan,
-      isActive: true,
+      status: 'ACCEPTED',
     },
     {
       name: "Chocolate Old Fashioned",
       description: "Classic cake donut with rich chocolate glaze",
       isHero: false,
       dietary: vegan,
-      isActive: true,
+      status: 'ACCEPTED',
     },
   ],
   "General Porpoise": [
@@ -66,14 +66,14 @@ const sampleDishes: Record<string, Omit<Dish, 'id' | 'placeId' | 'createdAt' | '
       description: "Brioche doughnut filled with house-made salted caramel",
       isHero: true,
       dietary: noDietary,
-      isActive: true,
+      status: 'ACCEPTED',
     },
     {
       name: "Lemon Curd Doughnut",
       description: "Light and tangy lemon curd in a pillowy brioche",
       isHero: false,
       dietary: noDietary,
-      isActive: true,
+      status: 'ACCEPTED',
     },
   ],
   "Hood Famous Cafe": [
@@ -82,14 +82,14 @@ const sampleDishes: Record<string, Omit<Dish, 'id' | 'placeId' | 'createdAt' | '
       description: "Filipino purple yam cheesecake with coconut crust",
       isHero: true,
       dietary: gfOnly,
-      isActive: true,
+      status: 'ACCEPTED',
     },
     {
       name: "Mango Float",
       description: "Layers of graham, cream, and fresh mango",
       isHero: false,
       dietary: noDietary,
-      isActive: true,
+      status: 'ACCEPTED',
     },
   ],
   "Rachel's Ginger Beer": [
@@ -98,14 +98,14 @@ const sampleDishes: Record<string, Omit<Dish, 'id' | 'placeId' | 'createdAt' | '
       description: "Spicy, fresh-pressed ginger beer on tap",
       isHero: true,
       dietary: veganGF,
-      isActive: true,
+      status: 'ACCEPTED',
     },
     {
       name: "Blood Orange Ginger Beer",
       description: "Seasonal citrus twist on the classic",
       isHero: false,
       dietary: veganGF,
-      isActive: true,
+      status: 'ACCEPTED',
     },
   ],
 };

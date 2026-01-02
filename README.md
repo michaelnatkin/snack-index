@@ -4,6 +4,22 @@
 
 Snack Index is laser-focused on one thing: helping adventurous eaters discover great food trucks, hole-in-the-wall restaurants, and unique local eateries—without the endless scrolling and decision fatigue of traditional review apps.
 
+Place suitability:
+* It must be in the appropriate area (currently Seattle metro)
+* It must really exist and still be in business.
+* It must be very good! We need to be able to confirm from trusted sources - obviously knowledgeable food blogs, Eater, food magazines, etc that this is a great place. Not just a bunch of Yelp reviews. Use "know it when you see it" approach, but require reputable foodie sources rather than mass star ratings.
+* It must not be a large chain restaurant - a small local chain with up to 8 locations is acceptable, but definitely no Starbucks or McDonalds.
+* It must be suitable for getting a legitimate snack. Something you can order and take with you in a few minutes, or eat quickly on site. No bars, no full meals, no sit-down restaurants. 
+* Food trucks, take-out windows, fish & chips joints,bakeries, ice cream shops, hot dog stands, burger joints, chaat shops, falafel joints, etc are all awesome (but not the only options).
+* Example: a pizza place that offers slices is great (e.g. Big Marios, Pagliacci); a pizza place that only lets you order whole pies (Serious Pie)is not.
+* Example: pani puri at a chaat-oriented shop is great; dosa at a place that is oriented to a full sit down meal is not.
+* Marginal example: at some Indian places, it might be reasonable to call ahead to order samosas to go. For places requiring advance ordering, include them but note "order ahead for takeout" in the place description.
+
+Dish suitability:
+* It must be a dish that is suitable for a snack or only part of a meal. We might stretch that as far as a burger or sandwich.
+* It must be one of the 3-5 most popular & loved dishes at a place. Determine popularity from trusted sources mentioning specific dishes + restaurant website cues (featured items, menu highlights, etc.).
+* It is important to include a diversity of of dishes that are vegetarian, vegan, and gluten-free as well as omnivorous. 
+
 > Open the app → see one recommendation → decide → move on.
 
 ![React](https://img.shields.io/badge/React-19-blue?logo=react)

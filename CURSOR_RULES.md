@@ -40,3 +40,14 @@ it('filters out closed places', async () => {
 
 If a function has complex dependencies, mock them properly and test the real function's behavior.
 
+## Firestore Index Changes
+
+When modifying Firestore queries that use composite indexes (e.g., changing `where` clauses, adding new query constraints):
+
+1. **Update `firestore.indexes.json`** with the new index definition
+2. **Deploy indexes immediately**: Run `firebase deploy --only firestore:indexes` (or prompt user to do so)
+3. **Test against real Firestore** - not just mocks/emulator. The emulator doesn't enforce composite index requirements.
+4. **Check browser console AFTER triggering the specific query** - index errors only appear when that query path is hit
+
+Unit tests with mocks will NOT catch missing Firestore indexes. Always verify index-dependent queries work in production.
+

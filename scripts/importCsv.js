@@ -177,8 +177,8 @@ async function main() {
           ...(row.description?.trim() ? { description: row.description.trim() } : {}),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-          createdBy: 'import-script',
-          isActive: true,
+          createdBy: 'importScript',
+          status: 'ACCEPTED',
         });
 
         placeEntry = { placeDocId: placeDoc.id };
@@ -209,7 +209,7 @@ async function main() {
       isHero: row.isHero?.toString().toLowerCase() === 'true',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      isActive: true,
+      status: 'ACCEPTED',
     });
   }
 

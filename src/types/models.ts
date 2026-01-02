@@ -72,7 +72,29 @@ export interface UserPermissions {
 export type PermissionState = 'granted' | 'denied' | 'prompt' | 'unsupported' | 'default';
 
 /**
+ * Status for places in the system
+ * - SUGGESTED: New place pending review (default for user submissions)
+ * - ACCEPTED: Approved and visible in recommendations
+ * - REJECTED: Not approved, hidden from recommendations
+ * - PERMANENTLY_CLOSED: Place has closed
+ */
+export type PlaceStatus = 'SUGGESTED' | 'ACCEPTED' | 'REJECTED' | 'PERMANENTLY_CLOSED';
+
+/**
+ * Status for dishes in the system
+ * - SUGGESTED: New dish pending review
+ * - ACCEPTED: Approved and visible in recommendations
+ * - REJECTED: Not approved, hidden from recommendations
+ */
+export type DishStatus = 'SUGGESTED' | 'ACCEPTED' | 'REJECTED';
+
+/**
  * Place stored in Firestore
+ * 
+ * createdBy values:
+ * - User email (e.g., "user@example.com") - human suggestion
+ * - "importScript" - added via CSV import script
+ * - "agent" - added by AI agent
  */
 export interface Place {
   id: string;
@@ -87,7 +109,8 @@ export interface Place {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   createdBy: string;
-  isActive: boolean;
+  status: PlaceStatus;
+  rejectedReason?: string;
 }
 
 /**
@@ -103,7 +126,8 @@ export interface Dish {
   isHero: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  isActive: boolean;
+  status: DishStatus;
+  rejectedReason?: string;
 }
 
 /**

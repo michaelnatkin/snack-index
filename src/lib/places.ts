@@ -5,7 +5,6 @@ import {
   getDoc,
   addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -32,11 +31,11 @@ export async function getAllPlaces(): Promise<Place[]> {
 }
 
 /**
- * Get active places only
+ * Get active places only (status: ACCEPTED)
  */
 export async function getActivePlaces(): Promise<Place[]> {
   const placesRef = collection(db, 'places');
-  const q = query(placesRef, where('isActive', '==', true));
+  const q = query(placesRef, where('status', '==', 'ACCEPTED'));
   const snapshot = await getDocs(q);
   
   return snapshot.docs.map((doc) => ({
@@ -101,11 +100,15 @@ export async function updatePlace(
 }
 
 /**
- * Delete a place
+ * Soft delete a place (marks as REJECTED)
  */
-export async function deletePlace(placeId: string): Promise<void> {
+export async function deletePlace(placeId: string, reason?: string): Promise<void> {
   const docRef = doc(db, 'places', placeId);
-  await deleteDoc(docRef);
+  await updateDoc(docRef, {
+    status: 'REJECTED',
+    rejectedReason: reason || 'Deleted by admin',
+    updatedAt: serverTimestamp(),
+  });
 }
 
 // ============= Dishes CRUD =============
@@ -126,14 +129,14 @@ export async function getDishesForPlace(placeId: string): Promise<Dish[]> {
 }
 
 /**
- * Get active dishes for a place
+ * Get active dishes for a place (status: ACCEPTED)
  */
 export async function getActiveDishesForPlace(placeId: string): Promise<Dish[]> {
   const dishesRef = collection(db, 'dishes');
   const q = query(
     dishesRef,
     where('placeId', '==', placeId),
-    where('isActive', '==', true)
+    where('status', '==', 'ACCEPTED')
   );
   const snapshot = await getDocs(q);
   
@@ -185,11 +188,15 @@ export async function updateDish(
 }
 
 /**
- * Delete a dish
+ * Soft delete a dish (marks as REJECTED)
  */
-export async function deleteDish(dishId: string): Promise<void> {
+export async function deleteDish(dishId: string, reason?: string): Promise<void> {
   const docRef = doc(db, 'dishes', dishId);
-  await deleteDoc(docRef);
+  await updateDoc(docRef, {
+    status: 'REJECTED',
+    rejectedReason: reason || 'Deleted by admin',
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -201,7 +208,7 @@ export async function getHeroDishForPlace(placeId: string): Promise<Dish | null>
     dishesRef,
     where('placeId', '==', placeId),
     where('isHero', '==', true),
-    where('isActive', '==', true)
+    where('status', '==', 'ACCEPTED')
   );
   const snapshot = await getDocs(q);
 

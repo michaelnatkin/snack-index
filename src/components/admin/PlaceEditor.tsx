@@ -13,7 +13,7 @@ import {
   createDish,
 } from '@/lib/places';
 import { searchPlaces, getPlaceDetails, type PlaceAutocompleteResult } from '@/lib/googlePlaces';
-import type { Dish, DietaryFilters } from '@/types/models';
+import type { Dish, DietaryFilters, PlaceStatus, DishStatus } from '@/types/models';
 
 interface NewDishForm {
   id: string;
@@ -48,7 +48,8 @@ export function PlaceEditor() {
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
   const [description, setDescription] = useState('');
-  const [isActive, setIsActive] = useState(true);
+  const [status, setStatus] = useState<PlaceStatus>('ACCEPTED');
+  const [rejectedReason, setRejectedReason] = useState('');
   const [dishes, setDishes] = useState<Dish[]>([]);
 
   // Search state
@@ -85,7 +86,8 @@ export function PlaceEditor() {
       setLatitude(place.latitude);
       setLongitude(place.longitude);
       setDescription(place.description || '');
-      setIsActive(place.isActive);
+      setStatus(place.status);
+      setRejectedReason(place.rejectedReason || '');
 
       const placeDishes = await getDishesForPlace(id);
       setDishes(placeDishes);
@@ -174,7 +176,8 @@ export function PlaceEditor() {
         latitude: number;
         longitude: number;
         description?: string;
-        isActive: boolean;
+        status: PlaceStatus;
+        rejectedReason?: string;
         createdBy: string;
       } = {
         googlePlaceId,
@@ -182,11 +185,14 @@ export function PlaceEditor() {
         address,
         latitude,
         longitude,
-        isActive,
-        createdBy: user?.id || '',
+        status,
+        createdBy: user?.email || user?.id || '',
       };
       if (desc) {
         placeData.description = desc;
+      }
+      if (status === 'REJECTED' && rejectedReason.trim()) {
+        placeData.rejectedReason = rejectedReason.trim();
       }
 
       if (isNew) {
@@ -201,13 +207,13 @@ export function PlaceEditor() {
             description?: string;
             isHero: boolean;
             dietary: DietaryFilters;
-            isActive: boolean;
+            status: DishStatus;
           } = {
             placeId: newPlaceId,
             name: dish.name.trim(),
             isHero: dish.isHero,
             dietary: dish.dietary,
-            isActive: true,
+            status: 'ACCEPTED',
           };
           if (dish.description.trim()) {
             dishData.description = dish.description.trim();
@@ -228,16 +234,17 @@ export function PlaceEditor() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this place? This cannot be undone.')) {
-      return;
+    const reason = prompt('Reason for rejecting this place (optional):');
+    if (reason === null) {
+      return; // User cancelled
     }
 
     setSaving(true);
     try {
-      await deletePlace(placeId!);
+      await deletePlace(placeId!, reason || 'Deleted by admin');
       navigate('/admin');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete place');
+      setError(err instanceof Error ? err.message : 'Failed to reject place');
       setSaving(false);
     }
   };
@@ -576,30 +583,51 @@ export function PlaceEditor() {
           </div>
         )}
 
-        {/* Active Toggle */}
-        <div className="bg-surface rounded-lg p-4 border border-butter/30">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="w-5 h-5 rounded border-sage text-primary focus:ring-primary"
-            />
-            <span className="text-charcoal">Active</span>
-          </label>
-          <p className="text-xs text-text-muted mt-1 ml-8">
-            Inactive places won&apos;t appear in recommendations
-          </p>
+        {/* Status Select */}
+        <div className="bg-surface rounded-lg p-4 border border-butter/30 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-charcoal mb-2">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as PlaceStatus)}
+              className="w-full px-4 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="SUGGESTED">Suggested (pending review)</option>
+              <option value="ACCEPTED">Accepted (visible in recommendations)</option>
+              <option value="REJECTED">Rejected (hidden)</option>
+              <option value="PERMANENTLY_CLOSED">Permanently Closed</option>
+            </select>
+            <p className="text-xs text-text-muted mt-2">
+              Only &quot;Accepted&quot; places appear in recommendations
+            </p>
+          </div>
+
+          {status === 'REJECTED' && (
+            <div>
+              <label className="block text-sm font-medium text-charcoal mb-2">
+                Rejection Reason
+              </label>
+              <input
+                type="text"
+                value={rejectedReason}
+                onChange={(e) => setRejectedReason(e.target.value)}
+                placeholder="Why was this place rejected?"
+                className="w-full px-4 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          )}
         </div>
 
-        {/* Delete Button (only for existing places) */}
+        {/* Reject Button (only for existing places) */}
         {!isNew && (
           <Button
             variant="ghost"
             className="w-full text-paprika hover:bg-paprika/10"
             onClick={handleDelete}
           >
-            Delete Place
+            Reject Place
           </Button>
         )}
       </div>

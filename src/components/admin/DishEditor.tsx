@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { getDish, createDish, updateDish, deleteDish, getDishByNameForPlace } from '@/lib/places';
-import type { DietaryFilters } from '@/types/models';
+import type { DietaryFilters, DishStatus } from '@/types/models';
 
 export function DishEditor() {
   const navigate = useNavigate();
@@ -23,7 +23,8 @@ export function DishEditor() {
     vegan: false,
     glutenFree: false,
   });
-  const [isActive, setIsActive] = useState(true);
+  const [status, setStatus] = useState<DishStatus>('ACCEPTED');
+  const [rejectedReason, setRejectedReason] = useState('');
 
   useEffect(() => {
     if (!isNew && dishId) {
@@ -46,7 +47,8 @@ export function DishEditor() {
       setDescription(dish.description || '');
       setIsHero(dish.isHero);
       setDietary(dish.dietary);
-      setIsActive(dish.isActive);
+      setStatus(dish.status);
+      setRejectedReason(dish.rejectedReason || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dish');
     } finally {
@@ -90,16 +92,20 @@ export function DishEditor() {
         description?: string;
         isHero: boolean;
         dietary: DietaryFilters;
-        isActive: boolean;
+        status: DishStatus;
+        rejectedReason?: string;
       } = {
         placeId,
         name: name.trim(),
         isHero,
         dietary,
-        isActive,
+        status,
       };
       if (desc) {
         dishData.description = desc;
+      }
+      if (status === 'REJECTED' && rejectedReason.trim()) {
+        dishData.rejectedReason = rejectedReason.trim();
       }
 
       if (isNew) {
@@ -117,16 +123,17 @@ export function DishEditor() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this dish? This cannot be undone.')) {
-      return;
+    const reason = prompt('Reason for rejecting this dish (optional):');
+    if (reason === null) {
+      return; // User cancelled
     }
 
     setSaving(true);
     try {
-      await deleteDish(dishId!);
+      await deleteDish(dishId!, reason || 'Deleted by admin');
       navigate(`/admin/place/${placeId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete dish');
+      setError(err instanceof Error ? err.message : 'Failed to reject dish');
       setSaving(false);
     }
   };
@@ -251,30 +258,50 @@ export function DishEditor() {
           </div>
         </div>
 
-        {/* Active Toggle */}
-        <div className="bg-surface rounded-lg p-4 border border-butter/30">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="w-5 h-5 rounded border-sage text-primary focus:ring-primary"
-            />
-            <span className="text-charcoal">Active</span>
-          </label>
-          <p className="text-xs text-text-muted mt-1 ml-8">
-            Inactive dishes won&apos;t appear in recommendations
-          </p>
+        {/* Status Select */}
+        <div className="bg-surface rounded-lg p-4 border border-butter/30 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-charcoal mb-2">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as DishStatus)}
+              className="w-full px-4 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="SUGGESTED">Suggested (pending review)</option>
+              <option value="ACCEPTED">Accepted (visible in recommendations)</option>
+              <option value="REJECTED">Rejected (hidden)</option>
+            </select>
+            <p className="text-xs text-text-muted mt-2">
+              Only &quot;Accepted&quot; dishes appear in recommendations
+            </p>
+          </div>
+
+          {status === 'REJECTED' && (
+            <div>
+              <label className="block text-sm font-medium text-charcoal mb-2">
+                Rejection Reason
+              </label>
+              <input
+                type="text"
+                value={rejectedReason}
+                onChange={(e) => setRejectedReason(e.target.value)}
+                placeholder="Why was this dish rejected?"
+                className="w-full px-4 py-2 rounded-lg border border-butter bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          )}
         </div>
 
-        {/* Delete Button (only for existing dishes) */}
+        {/* Reject Button (only for existing dishes) */}
         {!isNew && (
           <Button
             variant="ghost"
             className="w-full text-paprika hover:bg-paprika/10"
             onClick={handleDelete}
           >
-            Delete Dish
+            Reject Dish
           </Button>
         )}
       </div>
