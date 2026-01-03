@@ -21,6 +21,8 @@ export interface PlaceRecommendation {
   distance: number;
   isOpen: boolean;
   closeTime?: string;
+  /** Full hours range for the day, e.g., "10 AM - 2 PM" */
+  todayHoursRange?: string;
 }
 
 export interface RecommendationResult {
@@ -181,6 +183,7 @@ async function processPlaceForNearest(
     getPlaceHoursWithRefresh(place.id, place.googlePlaceId, currentTimeOverride).catch(() => ({
       isOpen: true,
       closeTime: undefined,
+      todayHoursRange: undefined,
       periods: undefined,
     })),
   ]);
@@ -204,6 +207,7 @@ async function processPlaceForNearest(
     distance,
     isOpen: hours.isOpen,
     closeTime: hours.closeTime,
+    todayHoursRange: hours.todayHoursRange,
     nextOpenInMinutes,
   };
 }
@@ -286,6 +290,7 @@ export async function getNearestOpenPlace(
         distance: openPlace.distance,
         isOpen: openPlace.isOpen,
         closeTime: openPlace.closeTime,
+        todayHoursRange: openPlace.todayHoursRange,
       },
     };
   }
@@ -325,7 +330,7 @@ async function processPlaceForRecommendation(
   // Fetch dishes and hours in parallel
   const [allDishes, hours] = await Promise.all([
     getActiveDishesForPlace(place.id),
-    getPlaceHoursWithRefresh(place.id, place.googlePlaceId, currentTimeOverride).catch(() => ({ isOpen: true, closeTime: undefined })),
+    getPlaceHoursWithRefresh(place.id, place.googlePlaceId, currentTimeOverride).catch(() => ({ isOpen: true, closeTime: undefined, todayHoursRange: undefined })),
   ]);
 
   const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);
@@ -344,6 +349,7 @@ async function processPlaceForRecommendation(
     distance,
     isOpen,
     closeTime: hours.closeTime,
+    todayHoursRange: hours.todayHoursRange,
   };
 }
 

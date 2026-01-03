@@ -291,6 +291,52 @@ describe('getPlaceHours', () => {
     expect(hours.isOpen).toBe(true);
     expect(hours.closeTime).toBe('9 PM');
   });
+
+  it('returns todayHoursRange for single period', async () => {
+    const cachedData = {
+      periods: [
+        { open: { day: 1, time: '1000' }, close: { day: 1, time: '1400' } },
+      ],
+    };
+    (getCached as unknown as Mock).mockResolvedValue(cachedData);
+
+    // Monday at 11am
+    const mondayMorning = new Date('2025-01-06T11:00:00');
+    const hours = await getPlaceHours('abc123', mondayMorning);
+
+    expect(hours.todayHoursRange).toBe('10 AM - 2 PM');
+  });
+
+  it('returns todayHoursRange for split hours (lunch/dinner)', async () => {
+    const cachedData = {
+      periods: [
+        { open: { day: 2, time: '1100' }, close: { day: 2, time: '1500' } },
+        { open: { day: 2, time: '1700' }, close: { day: 2, time: '2100' } },
+      ],
+    };
+    (getCached as unknown as Mock).mockResolvedValue(cachedData);
+
+    // Tuesday at noon
+    const tuesdayNoon = new Date('2025-01-07T12:00:00');
+    const hours = await getPlaceHours('abc123', tuesdayNoon);
+
+    expect(hours.todayHoursRange).toBe('11 AM - 3 PM, 5 PM - 9 PM');
+  });
+
+  it('returns undefined todayHoursRange when no periods for that day', async () => {
+    const cachedData = {
+      periods: [
+        { open: { day: 1, time: '1000' }, close: { day: 1, time: '1400' } }, // Monday only
+      ],
+    };
+    (getCached as unknown as Mock).mockResolvedValue(cachedData);
+
+    // Tuesday at noon
+    const tuesdayNoon = new Date('2025-01-07T12:00:00');
+    const hours = await getPlaceHours('abc123', tuesdayNoon);
+
+    expect(hours.todayHoursRange).toBeUndefined();
+  });
 });
 
 describe('isStaleGooglePlaceIdError', () => {

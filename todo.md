@@ -1,16 +1,14 @@
-
-* add more real places and edit them, ask for a focus on veg dishes - have to wait for my gemini to reset
-* make sure to skip duplicates in the researcher
+* why is general porpoise showing up?
+* what happened to the files from skills?
+* run on eugene
+* add more real places and edit them,
+* review all UI - esp in the profile menu
 * how will we handle multiple locations for the same restaurant?
-* ~~let any user set location/time~~ ✅ Added "Plan Ahead" in profile menu
-* put an admin link directly on a place so I can edit it
 
 Family launch
 
 * favicon
-
 * add a rating for places - in a pinch / tasty / worth a special trip
-* clean up navigation from settings
 
 
 Wider launch

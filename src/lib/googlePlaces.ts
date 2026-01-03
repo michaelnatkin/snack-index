@@ -59,6 +59,8 @@ export interface PlaceDetails {
 export interface PlaceHours {
   isOpen: boolean;
   closeTime?: string;
+  /** Full hours range for the day, e.g., "10 AM - 2 PM" or "11 AM - 3 PM, 5 PM - 10 PM" */
+  todayHoursRange?: string;
   periods?: Array<{
     open: { day: number; time: string };
     close?: { day: number; time: string };
@@ -423,6 +425,33 @@ async function fetchPlaceHoursFromApi(placeId: string): Promise<CachedHoursData>
 }
 
 /**
+ * Format a range of periods for the day, e.g., "10 AM - 2 PM" or "11 AM - 3 PM, 5 PM - 10 PM"
+ */
+function formatTodayHoursRange(
+  todayPeriods: ParsedPeriod[]
+): string | undefined {
+  if (todayPeriods.length === 0) return undefined;
+
+  // Sort periods by open time
+  const sorted = [...todayPeriods].sort((a, b) => {
+    const aTime = parseInt(a.open.time, 10);
+    const bTime = parseInt(b.open.time, 10);
+    return aTime - bTime;
+  });
+
+  const ranges = sorted.map((period) => {
+    const openFormatted = formatTimeAmPm(period.open.time);
+    if (period.close?.time) {
+      const closeFormatted = formatTimeAmPm(period.close.time);
+      return `${openFormatted} - ${closeFormatted}`;
+    }
+    return `${openFormatted}+`;
+  });
+
+  return ranges.join(', ');
+}
+
+/**
  * Compute isOpen and closeTime from cached periods data
  * Always computes isOpen from periods using current time (or override)
  */
@@ -447,6 +476,9 @@ function computeHoursFromPeriods(
 
   // Find ALL periods for today (handles lunch/dinner split hours)
   const todayPeriods = periods.filter((p) => p.open.day === day);
+
+  // Format the full hours range for today
+  hours.todayHoursRange = formatTodayHoursRange(todayPeriods);
 
   // Check if current time falls within ANY of today's periods
   for (const period of todayPeriods) {

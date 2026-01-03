@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { RecommendationCard } from './RecommendationCard';
 import type { PlaceRecommendation } from '@/lib/recommendations';
@@ -9,6 +9,14 @@ vi.mock('@/lib/googlePlaces', () => ({
   getGoogleMapsUrl: vi.fn().mockReturnValue('https://maps.google.com'),
   getGooglePlacePhotoUrl: vi.fn().mockResolvedValue(null),
   getGooglePlacePhotoUrlWithRefresh: vi.fn().mockResolvedValue(null),
+}));
+
+// Mock planning store
+const mockHasOverrides = vi.fn();
+vi.mock('@/stores/planningStore', () => ({
+  usePlanningStore: () => ({
+    hasOverrides: mockHasOverrides,
+  }),
 }));
 
 const mockRecommendation: PlaceRecommendation = {
@@ -59,6 +67,10 @@ describe('RecommendationCard', () => {
     onClick: vi.fn(),
   };
 
+  beforeEach(() => {
+    mockHasOverrides.mockReturnValue(false);
+  });
+
   it('renders place name', () => {
     render(<RecommendationCard recommendation={mockRecommendation} {...mockHandlers} />);
     expect(screen.getByText('Test Taco Shop')).toBeInTheDocument();
@@ -74,7 +86,38 @@ describe('RecommendationCard', () => {
     render(<RecommendationCard recommendation={mockRecommendation} {...mockHandlers} />);
     // Distance 0.3 miles formats as "0.3 mi"
     expect(screen.getByText(/0\.3 mi/)).toBeInTheDocument();
-    expect(screen.getByText(/Open/)).toBeInTheDocument();
+    expect(screen.getByText(/Open until 9 PM/)).toBeInTheDocument();
+  });
+
+  it('displays hours range when planning ahead', () => {
+    mockHasOverrides.mockReturnValue(true);
+    const recommendation: PlaceRecommendation = {
+      ...mockRecommendation,
+      todayHoursRange: '10 AM - 2 PM',
+    };
+    render(<RecommendationCard recommendation={recommendation} {...mockHandlers} />);
+    expect(screen.getByText(/10 AM - 2 PM/)).toBeInTheDocument();
+    expect(screen.queryByText(/Open until/)).not.toBeInTheDocument();
+  });
+
+  it('displays split hours range when planning ahead', () => {
+    mockHasOverrides.mockReturnValue(true);
+    const recommendation: PlaceRecommendation = {
+      ...mockRecommendation,
+      todayHoursRange: '11 AM - 3 PM, 5 PM - 9 PM',
+    };
+    render(<RecommendationCard recommendation={recommendation} {...mockHandlers} />);
+    expect(screen.getByText(/11 AM - 3 PM, 5 PM - 9 PM/)).toBeInTheDocument();
+  });
+
+  it('falls back to Open until when no hours range available', () => {
+    mockHasOverrides.mockReturnValue(true);
+    const recommendation: PlaceRecommendation = {
+      ...mockRecommendation,
+      todayHoursRange: undefined,
+    };
+    render(<RecommendationCard recommendation={recommendation} {...mockHandlers} />);
+    expect(screen.getByText(/Open until 9 PM/)).toBeInTheDocument();
   });
 });
 

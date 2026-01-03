@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDistance } from '@/lib/location';
 import { getGooglePlacePhotoUrlWithRefresh } from '@/lib/googlePlaces';
+import { usePlanningStore } from '@/stores/planningStore';
 import type { PlaceRecommendation } from '@/lib/recommendations';
 
 interface RecommendationCardProps {
@@ -24,8 +25,10 @@ export function RecommendationCard({
   const [isDragging, setIsDragging] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [hasMoved, setHasMoved] = useState(false);
+  const { hasOverrides } = usePlanningStore();
 
-  const { place, heroDish, dishes, distance, closeTime } = recommendation;
+  const { place, heroDish, dishes, distance, closeTime, todayHoursRange } = recommendation;
+  const isPlanningAhead = hasOverrides();
 
   useEffect(() => {
     let isMounted = true;
@@ -149,7 +152,7 @@ export function RecommendationCard({
         </h2>
 
         <p className="text-base text-white/90 mt-2">
-          {formatDistance(distance)} · Open{closeTime ? ` until ${closeTime}` : ''}
+          {formatDistance(distance)} · {isPlanningAhead && todayHoursRange ? todayHoursRange : `Open${closeTime ? ` until ${closeTime}` : ''}`}
           {displayDish && <> · 🔥 {displayDish.name}</>}
         </p>
       </div>
