@@ -8,6 +8,7 @@ import { Timestamp } from 'firebase/firestore';
 vi.mock('@/lib/googlePlaces', () => ({
   getGoogleMapsUrl: vi.fn().mockReturnValue('https://maps.google.com'),
   getGooglePlacePhotoUrl: vi.fn().mockResolvedValue(null),
+  getGooglePlacePhotoUrlWithRefresh: vi.fn().mockResolvedValue(null),
 }));
 
 const mockRecommendation: PlaceRecommendation = {

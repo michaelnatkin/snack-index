@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:*)",
+      "WebFetch(domain:**)",
+      "WebFetch(domain:*.*)",
+      "WebFetch(domain:*.*.*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

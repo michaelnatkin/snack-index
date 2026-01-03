@@ -27,9 +27,9 @@ vi.mock('./places', () => ({
 }));
 
 // Mock googlePlaces
-const mockGetPlaceHours = vi.fn();
+const mockGetPlaceHoursWithRefresh = vi.fn();
 vi.mock('./googlePlaces', () => ({
-  getPlaceHours: (...args: unknown[]) => mockGetPlaceHours(...args),
+  getPlaceHoursWithRefresh: (...args: unknown[]) => mockGetPlaceHoursWithRefresh(...args),
 }));
 
 // Mock location
@@ -90,7 +90,7 @@ describe('Recommendations', () => {
     mockGetDocs.mockResolvedValue({ docs: [] });
     mockGetActivePlaces.mockResolvedValue([]);
     mockGetActiveDishesForPlace.mockResolvedValue([]);
-    mockGetPlaceHours.mockResolvedValue({ isOpen: true, closeTime: undefined });
+    mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true, closeTime: undefined });
   });
 
   describe('processCandidateBatch', () => {
@@ -114,7 +114,7 @@ describe('Recommendations', () => {
         if (placeId === '1') return Promise.resolve([dish1]);
         return Promise.resolve([dish1]);
       });
-      mockGetPlaceHours.mockImplementation((googlePlaceId: string) => {
+      mockGetPlaceHoursWithRefresh.mockImplementation((firestorePlaceId: string, googlePlaceId: string) => {
         if (googlePlaceId === 'google-1') return Promise.resolve({ isOpen: true, closeTime: '22:00' });
         return Promise.resolve({ isOpen: false, closeTime: undefined });
       });
@@ -134,7 +134,7 @@ describe('Recommendations', () => {
       const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
 
       mockGetActiveDishesForPlace.mockResolvedValue([nonVeganDish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const veganFilters: DietaryFilters = { vegetarian: false, vegan: true, glutenFree: false };
       const result = await processCandidateBatch(candidates, veganFilters);
@@ -149,7 +149,7 @@ describe('Recommendations', () => {
       const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
 
       mockGetActiveDishesForPlace.mockResolvedValue([veganDish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const veganFilters: DietaryFilters = { vegetarian: false, vegan: true, glutenFree: false };
       const result = await processCandidateBatch(candidates, veganFilters);
@@ -167,7 +167,7 @@ describe('Recommendations', () => {
       const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
 
       mockGetActiveDishesForPlace.mockResolvedValue([veganOnlyDish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const vegetarianFilters: DietaryFilters = { vegetarian: true, vegan: false, glutenFree: false };
       const result = await processCandidateBatch(candidates, vegetarianFilters);
@@ -185,7 +185,7 @@ describe('Recommendations', () => {
       const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
 
       mockGetActiveDishesForPlace.mockResolvedValue([regularDish, heroDish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const filters: DietaryFilters = { vegetarian: false, vegan: false, glutenFree: false };
       const result = await processCandidateBatch(candidates, filters);
@@ -203,7 +203,7 @@ describe('Recommendations', () => {
       const candidates: PlaceWithDistance[] = [{ place, distance: 0.5 }];
 
       mockGetActiveDishesForPlace.mockResolvedValue([nonVeganHero, veganDish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const veganFilters: DietaryFilters = { vegetarian: false, vegan: true, glutenFree: false };
       const result = await processCandidateBatch(candidates, veganFilters);
@@ -226,7 +226,7 @@ describe('Recommendations', () => {
       ];
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const filters: DietaryFilters = { vegetarian: false, vegan: false, glutenFree: false };
       const result = await processCandidateBatch(candidates, filters);
@@ -383,7 +383,7 @@ describe('Recommendations', () => {
         .mockResolvedValueOnce({ docs: [] }); // no dismissed places
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true, closeTime: '22:00' });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true, closeTime: '22:00' });
 
       const result = await getNearestOpenPlace(
         { latitude: 47.6, longitude: -122.3 },
@@ -477,7 +477,7 @@ describe('Recommendations', () => {
         .mockResolvedValueOnce({ docs: [] }); // no dismissed
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const result = await getRecommendationQueue(
         { latitude: 47.6, longitude: -122.3 },
@@ -512,7 +512,7 @@ describe('Recommendations', () => {
         .mockResolvedValueOnce({ docs: [] });
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetPlaceHours.mockResolvedValue({ isOpen: true });
+      mockGetPlaceHoursWithRefresh.mockResolvedValue({ isOpen: true });
 
       const result = await getRecommendationQueue(
         { latitude: 47.6, longitude: -122.3 },
@@ -556,7 +556,7 @@ describe('Recommendations', () => {
         .mockResolvedValueOnce({ docs: [] });
 
       mockGetActiveDishesForPlace.mockResolvedValue([dish]);
-      mockGetPlaceHours.mockImplementation((googlePlaceId: string) => {
+      mockGetPlaceHoursWithRefresh.mockImplementation((firestorePlaceId: string, googlePlaceId: string) => {
         if (googlePlaceId === 'google-1') return Promise.resolve({ isOpen: true });
         return Promise.resolve({ isOpen: false });
       });

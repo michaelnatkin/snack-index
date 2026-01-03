@@ -1,5 +1,5 @@
 import { getActivePlaces, getActiveDishesForPlace } from './places';
-import { getPlaceHours } from './googlePlaces';
+import { getPlaceHoursWithRefresh } from './googlePlaces';
 import { isInSeattleArea, calculateDistance, type Coordinates } from './location';
 import type { Place, Dish, DietaryFilters, UserPlaceInteraction } from '@/types/models';
 import {
@@ -178,7 +178,7 @@ async function processPlaceForNearest(
   // Fetch dishes and hours in parallel
   const [allDishes, hours] = await Promise.all([
     getActiveDishesForPlace(place.id),
-    getPlaceHours(place.googlePlaceId, currentTimeOverride).catch(() => ({
+    getPlaceHoursWithRefresh(place.id, place.googlePlaceId, currentTimeOverride).catch(() => ({
       isOpen: true,
       closeTime: undefined,
       periods: undefined,
@@ -325,7 +325,7 @@ async function processPlaceForRecommendation(
   // Fetch dishes and hours in parallel
   const [allDishes, hours] = await Promise.all([
     getActiveDishesForPlace(place.id),
-    getPlaceHours(place.googlePlaceId, currentTimeOverride).catch(() => ({ isOpen: true, closeTime: undefined })),
+    getPlaceHoursWithRefresh(place.id, place.googlePlaceId, currentTimeOverride).catch(() => ({ isOpen: true, closeTime: undefined })),
   ]);
 
   const matchingDishes = filterDishesByDietary(allDishes, dietaryFilters);

@@ -111,6 +111,20 @@ export async function deletePlace(placeId: string, reason?: string): Promise<voi
   });
 }
 
+/**
+ * Update a place's Google Place ID (used when refreshing stale IDs)
+ */
+export async function updatePlaceGooglePlaceId(
+  placeId: string,
+  newGooglePlaceId: string
+): Promise<void> {
+  const docRef = doc(db, 'places', placeId);
+  await updateDoc(docRef, {
+    googlePlaceId: newGooglePlaceId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ============= Dishes CRUD =============
 
 /**

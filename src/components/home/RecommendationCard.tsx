@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDistance } from '@/lib/location';
-import { getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
+import { getGooglePlacePhotoUrlWithRefresh } from '@/lib/googlePlaces';
 import type { PlaceRecommendation } from '@/lib/recommendations';
 
 interface RecommendationCardProps {
@@ -31,9 +31,13 @@ export function RecommendationCard({
     let isMounted = true;
 
     const loadPhoto = async () => {
-      const url = await getGooglePlacePhotoUrl(place.googlePlaceId, 800);
-      if (isMounted) {
-        setPhotoUrl(url);
+      try {
+        const url = await getGooglePlacePhotoUrlWithRefresh(place.id, place.googlePlaceId, 800);
+        if (isMounted) {
+          setPhotoUrl(url);
+        }
+      } catch (err) {
+        console.error('Failed to load photo:', err);
       }
     };
 
@@ -41,7 +45,7 @@ export function RecommendationCard({
     return () => {
       isMounted = false;
     };
-  }, [place.googlePlaceId]);
+  }, [place.id, place.googlePlaceId]);
 
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     const point = 'touches' in e ? e.touches[0] : e;

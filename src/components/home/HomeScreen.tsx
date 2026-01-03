@@ -19,7 +19,7 @@ import {
   type PlaceRecommendation,
   type PlaceWithDistance,
 } from '@/lib/recommendations';
-import { useTestingStore } from '@/stores/testingStore';
+import { usePlanningStore } from '@/stores/planningStore';
 import { markPlaceVisited, dismissPlace, isMilestoneVisit } from '@/lib/interactions';
 import { getGoogleMapsUrl } from '@/lib/googlePlaces';
 import { DismissModal } from './DismissModal';
@@ -32,7 +32,7 @@ const HOME_STATE_KEY = 'snack-index-home-state';
 export function HomeScreen() {
   const navigate = useNavigate();
   const { user, updateOnboarding, updatePermissions } = useUserStore();
-  const { overrideLocation, overrideTimeIso } = useTestingStore();
+  const { overrideLocation, overrideTimeIso } = usePlanningStore();
 
   // UI State
   const [loading, setLoading] = useState(true);
@@ -473,7 +473,7 @@ export function HomeScreen() {
         <>
           {/* Profile Menu - top right */}
           <div className="fixed top-4 right-4 z-50">
-            <ProfileMenu />
+            <ProfileMenu placeId={currentRecommendation.place.id} />
           </div>
 
           {/* Full-page recommendation */}

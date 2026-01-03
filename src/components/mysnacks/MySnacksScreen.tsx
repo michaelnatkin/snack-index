@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { getFavoritePlaces, getVisitedPlaces, unfavoritePlace } from '@/lib/interactions';
 import { getPlace } from '@/lib/places';
-import { getPlaceHours } from '@/lib/googlePlaces';
+import { getPlaceHoursWithRefresh } from '@/lib/googlePlaces';
 import { useUserStore } from '@/stores/userStore';
 import type { Place, UserPlaceInteraction } from '@/types/models';
 
@@ -72,7 +72,7 @@ export function MySnacksScreen() {
     const openPlaces: PlaceWithInteraction[] = [];
     for (const item of savedPlaces) {
       try {
-        const hours = await getPlaceHours(item.place.googlePlaceId);
+        const hours = await getPlaceHoursWithRefresh(item.place.id, item.place.googlePlaceId);
         if (hours.isOpen) {
           openPlaces.push(item);
         }

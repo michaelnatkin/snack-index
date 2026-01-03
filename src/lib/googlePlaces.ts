@@ -5,10 +5,15 @@
  * 
  * Caching: Uses two-tier cache (Firestore + localStorage) for API responses
  * to reduce costs and improve performance across all users.
+ * 
+ * Place ID Refresh: Google Place IDs can become stale over time. When this
+ * happens, we automatically refresh the ID using text search and update
+ * our database.
  */
 
 import type { Coordinates } from './location';
-import { getCached, getCacheKey, CACHE_TTL } from './cache';
+import { getCached, getCacheKey, CACHE_TTL, invalidateCacheForPlace } from './cache';
+import { updatePlaceGooglePlaceId, getPlace } from './places';
 
 /**
  * Get the Google Places API key, throwing if not configured
@@ -63,6 +68,195 @@ export interface PlaceHours {
 const API_BASE = 'https://places.googleapis.com/v1';
 const DEFAULT_LOCATION = { latitude: 47.6062, longitude: -122.3321 }; // Seattle
 const DEFAULT_RADIUS_METERS = 50_000;
+
+/**
+ * Error class for stale Google Place ID errors
+ */
+export class StaleGooglePlaceIdError extends Error {
+  constructor(
+    public googlePlaceId: string,
+    public originalError: Error
+  ) {
+    super(`Google Place ID is no longer valid: ${googlePlaceId}`);
+    this.name = 'StaleGooglePlaceIdError';
+  }
+}
+
+/**
+ * Check if an error indicates a stale Google Place ID
+ */
+export function isStaleGooglePlaceIdError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('404') &&
+    (message.includes('place id is no longer valid') ||
+      message.includes('not_found'))
+  );
+}
+
+/**
+ * Parse error response to check for stale place ID
+ */
+function parseApiError(status: number, responseText: string): { isStale: boolean } {
+  if (status !== 404) return { isStale: false };
+  
+  try {
+    const parsed = JSON.parse(responseText);
+    const message = parsed?.error?.message?.toLowerCase() || '';
+    return {
+      isStale: message.includes('place id is no longer valid') || 
+               parsed?.error?.status === 'NOT_FOUND'
+    };
+  } catch {
+    return { isStale: false };
+  }
+}
+
+/**
+ * Search for a place by name and location to get a fresh Google Place ID
+ * Uses textSearch which is better for finding existing places
+ */
+export async function findPlaceByNameAndLocation(
+  name: string,
+  coords: { latitude: number; longitude: number }
+): Promise<string | null> {
+  const apiKey = getApiKey();
+
+  const body = {
+    textQuery: name,
+    locationBias: {
+      circle: {
+        center: coords,
+        radius: 500, // 500 meters radius for nearby search
+      },
+    },
+    maxResultCount: 5,
+  };
+
+  const res = await fetch(`${API_BASE}/places:searchText`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    console.warn('[refreshPlaceId] Text search failed:', res.status);
+    return null;
+  }
+
+  const data = await res.json();
+  const places = data.places || [];
+
+  if (places.length === 0) {
+    console.warn('[refreshPlaceId] No places found for:', name);
+    return null;
+  }
+
+  // Return the first match - Google orders by relevance
+  const match = places[0];
+  console.log('[refreshPlaceId] Found new place ID:', match.id, 'for:', name);
+  return match.id;
+}
+
+/**
+ * Attempt to refresh a stale Google Place ID
+ * Returns the new place ID if successful, null otherwise
+ */
+export async function refreshGooglePlaceId(
+  firestorePlaceId: string,
+  oldGooglePlaceId: string
+): Promise<string | null> {
+  // Get the place from our database to find its name and coordinates
+  const place = await getPlace(firestorePlaceId);
+  if (!place) {
+    console.warn('[refreshPlaceId] Place not found in database:', firestorePlaceId);
+    return null;
+  }
+
+  // Search for the place using its name and coordinates
+  const newGooglePlaceId = await findPlaceByNameAndLocation(
+    place.name,
+    { latitude: place.latitude, longitude: place.longitude }
+  );
+
+  if (!newGooglePlaceId) {
+    console.warn('[refreshPlaceId] Could not find new place ID for:', place.name);
+    return null;
+  }
+
+  if (newGooglePlaceId === oldGooglePlaceId) {
+    console.warn('[refreshPlaceId] New ID is same as old ID:', oldGooglePlaceId);
+    return null;
+  }
+
+  // Update the place in Firebase with the new Google Place ID
+  try {
+    await updatePlaceGooglePlaceId(firestorePlaceId, newGooglePlaceId);
+    console.log('[refreshPlaceId] Updated place', firestorePlaceId, 'with new Google Place ID:', newGooglePlaceId);
+  } catch (err) {
+    console.error('[refreshPlaceId] Failed to update place in Firebase:', err);
+    return null;
+  }
+
+  // Invalidate cached data for the old place ID
+  invalidateCacheForPlace(oldGooglePlaceId);
+
+  return newGooglePlaceId;
+}
+
+/**
+ * Context for place ID refresh operations
+ */
+interface PlaceContext {
+  firestorePlaceId: string;
+  googlePlaceId: string;
+}
+
+/**
+ * Wrapper that handles stale Google Place ID errors with automatic refresh and retry
+ * 
+ * Usage:
+ * ```
+ * const hours = await withPlaceIdRefresh(
+ *   { firestorePlaceId: 'abc123', googlePlaceId: 'ChIJ...' },
+ *   (placeId) => getPlaceHoursInternal(placeId)
+ * );
+ * ```
+ */
+export async function withPlaceIdRefresh<T>(
+  context: PlaceContext,
+  operation: (googlePlaceId: string) => Promise<T>
+): Promise<T> {
+  try {
+    return await operation(context.googlePlaceId);
+  } catch (error) {
+    if (!isStaleGooglePlaceIdError(error)) {
+      throw error;
+    }
+
+    console.warn('[withPlaceIdRefresh] Detected stale place ID:', context.googlePlaceId);
+
+    // Attempt to refresh the place ID
+    const newGooglePlaceId = await refreshGooglePlaceId(
+      context.firestorePlaceId,
+      context.googlePlaceId
+    );
+
+    if (!newGooglePlaceId) {
+      // Couldn't refresh, re-throw original error
+      throw new StaleGooglePlaceIdError(context.googlePlaceId, error as Error);
+    }
+
+    // Retry with the new place ID
+    console.log('[withPlaceIdRefresh] Retrying with new place ID:', newGooglePlaceId);
+    return await operation(newGooglePlaceId);
+  }
+}
 
 /**
  * Search for places by name (autocomplete)
@@ -129,6 +323,10 @@ async function fetchPlaceDetailsFromApi(placeId: string): Promise<CachedDetailsD
 
   if (!res.ok) {
     const text = await res.text();
+    const { isStale } = parseApiError(res.status, text);
+    if (isStale) {
+      throw new Error(`Place details failed: ${res.status} Place ID is no longer valid ${text}`);
+    }
     throw new Error(`Place details failed: ${res.status} ${text}`);
   }
 
@@ -191,6 +389,10 @@ async function fetchPlaceHoursFromApi(placeId: string): Promise<CachedHoursData>
 
   if (!res.ok) {
     const text = await res.text();
+    const { isStale } = parseApiError(res.status, text);
+    if (isStale) {
+      throw new Error(`Place hours failed: ${res.status} Place ID is no longer valid ${text}`);
+    }
     throw new Error(`Place hours failed: ${res.status} ${text}`);
   }
 
@@ -315,6 +517,35 @@ export async function getPlaceHours(placeId: string, currentTimeOverride?: Date)
 }
 
 /**
+ * Check if a place is currently open with automatic place ID refresh on stale IDs
+ * 
+ * @param firestorePlaceId - The Firestore document ID for the place
+ * @param googlePlaceId - The Google Place ID
+ * @param currentTimeOverride - Optional time override for testing
+ */
+export async function getPlaceHoursWithRefresh(
+  firestorePlaceId: string,
+  googlePlaceId: string,
+  currentTimeOverride?: Date
+): Promise<PlaceHours> {
+  return withPlaceIdRefresh(
+    { firestorePlaceId, googlePlaceId },
+    async (placeId) => {
+      const cacheKey = getCacheKey('hours', placeId);
+      const cachedData = await getCached<CachedHoursData>(
+        cacheKey,
+        'hours',
+        placeId,
+        CACHE_TTL.PLACE_HOURS,
+        CACHE_TTL.LOCAL_HOURS,
+        () => fetchPlaceHoursFromApi(placeId)
+      );
+      return computeHoursFromPeriods(cachedData, currentTimeOverride);
+    }
+  );
+}
+
+/**
  * Generate Google Maps walking directions URL from origin to a place.
  */
 export function getGoogleMapsUrl(
@@ -360,6 +591,10 @@ async function fetchPlacePhotoFromApi(placeId: string, maxWidthPx: number): Prom
 
   if (!res.ok) {
     const text = await res.text();
+    const { isStale } = parseApiError(res.status, text);
+    if (isStale) {
+      throw new Error(`Place photos failed: ${res.status} Place ID is no longer valid ${text}`);
+    }
     throw new Error(`Place photos failed: ${res.status} ${text}`);
   }
 
@@ -391,4 +626,36 @@ export async function getGooglePlacePhotoUrl(placeId: string, maxWidthPx = 800):
   );
 
   return cachedData.photoUrl;
+}
+
+/**
+ * Fetch a Google Places photo URL with automatic place ID refresh on stale IDs
+ * 
+ * @param firestorePlaceId - The Firestore document ID for the place
+ * @param googlePlaceId - The Google Place ID
+ * @param maxWidthPx - Maximum width of the photo
+ */
+export async function getGooglePlacePhotoUrlWithRefresh(
+  firestorePlaceId: string,
+  googlePlaceId: string,
+  maxWidthPx = 800
+): Promise<string | null> {
+  // Fail fast on configuration errors
+  getApiKey();
+
+  return withPlaceIdRefresh(
+    { firestorePlaceId, googlePlaceId },
+    async (placeId) => {
+      const cacheKey = getCacheKey('photo', placeId, String(maxWidthPx));
+      const cachedData = await getCached<CachedPhotoData>(
+        cacheKey,
+        'photo',
+        placeId,
+        CACHE_TTL.PLACE_PHOTO,
+        CACHE_TTL.LOCAL_PHOTO,
+        () => fetchPlacePhotoFromApi(placeId, maxWidthPx)
+      );
+      return cachedData.photoUrl;
+    }
+  );
 }

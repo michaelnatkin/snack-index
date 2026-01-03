@@ -207,3 +207,36 @@ export function clearLocalCache(): void {
   keysToRemove.forEach((key) => localStorage.removeItem(key));
 }
 
+/**
+ * Invalidate all cached data for a specific Google Place ID
+ * Used when a place ID becomes stale and needs to be refreshed
+ */
+export function invalidateCacheForPlace(googlePlaceId: string): void {
+  const cacheTypes: CacheType[] = ['hours', 'details', 'photo'];
+  
+  for (const type of cacheTypes) {
+    const cacheKey = getCacheKey(type, googlePlaceId);
+    const fullKey = LOCAL_CACHE_PREFIX + cacheKey;
+    
+    try {
+      localStorage.removeItem(fullKey);
+      console.debug('[cache] Invalidated L1 cache:', cacheKey);
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+  
+  // Also invalidate photo cache with common width suffix
+  const photoKey = getCacheKey('photo', googlePlaceId, '800');
+  try {
+    localStorage.removeItem(LOCAL_CACHE_PREFIX + photoKey);
+    console.debug('[cache] Invalidated L1 photo cache:', photoKey);
+  } catch {
+    // Ignore localStorage errors
+  }
+  
+  // Note: Firestore cache entries will naturally expire
+  // We don't delete them immediately to avoid extra write costs
+  console.log('[cache] Invalidated local cache for place:', googlePlaceId);
+}
+

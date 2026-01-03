@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { getPlace, getActiveDishesForPlace, getDish } from '@/lib/places';
-import { getGoogleMapsUrl, getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
+import { getGoogleMapsUrl, getGooglePlacePhotoUrlWithRefresh } from '@/lib/googlePlaces';
 import { useAuth } from '@/hooks/useAuth';
 import type { Place, Dish } from '@/types/models';
 
@@ -37,10 +37,14 @@ export function ShareLanding() {
     let isMounted = true;
 
     const loadPhoto = async () => {
-      if (!place?.googlePlaceId) return;
-      const url = await getGooglePlacePhotoUrl(place.googlePlaceId, 1200);
-      if (isMounted) {
-        setPhotoUrl(url);
+      if (!place?.id || !place?.googlePlaceId) return;
+      try {
+        const url = await getGooglePlacePhotoUrlWithRefresh(place.id, place.googlePlaceId, 1200);
+        if (isMounted) {
+          setPhotoUrl(url);
+        }
+      } catch (err) {
+        console.error('Failed to load photo:', err);
       }
     };
 
@@ -48,7 +52,7 @@ export function ShareLanding() {
     return () => {
       isMounted = false;
     };
-  }, [place?.googlePlaceId]);
+  }, [place?.id, place?.googlePlaceId]);
 
   const loadData = async () => {
     setLoading(true);

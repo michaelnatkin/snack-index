@@ -116,6 +116,18 @@ export async function dismissPlace(userId: string, placeId: string): Promise<voi
 }
 
 /**
+ * Check if a specific place is favorited by the user
+ */
+export async function isPlaceFavorited(userId: string, placeId: string): Promise<boolean> {
+  const interactionId = `${userId}_${placeId}`;
+  const docRef = doc(db, 'userPlaceInteractions', interactionId);
+  const docSnap = await getDoc(docRef);
+  
+  if (!docSnap.exists()) return false;
+  return docSnap.data()?.favorited === true;
+}
+
+/**
  * Get user's favorite places
  */
 export async function getFavoritePlaces(userId: string): Promise<UserPlaceInteraction[]> {

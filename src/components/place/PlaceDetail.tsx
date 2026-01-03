@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { CelebrationModal } from '@/components/home/CelebrationModal';
 import { getPlace, getActiveDishesForPlace, getHeroDishForPlace } from '@/lib/places';
-import { getPlaceHours, getGoogleMapsUrl, getGooglePlacePhotoUrl } from '@/lib/googlePlaces';
-import { markPlaceVisited, favoritePlace, isMilestoneVisit } from '@/lib/interactions';
+import { getPlaceHoursWithRefresh, getGoogleMapsUrl, getGooglePlacePhotoUrlWithRefresh } from '@/lib/googlePlaces';
+import { markPlaceVisited, favoritePlace, isPlaceFavorited, isMilestoneVisit } from '@/lib/interactions';
 import { formatDistance, calculateDistance } from '@/lib/location';
 import { useUserStore } from '@/stores/userStore';
 import type { Place, Dish } from '@/types/models';
@@ -54,7 +55,7 @@ export function PlaceDetail() {
 
         // Check if open
         try {
-          const hours = await getPlaceHours(placeData.googlePlaceId);
+          const hours = await getPlaceHoursWithRefresh(placeId, placeData.googlePlaceId);
           setIsOpen(hours.isOpen);
           setCloseTime(hours.closeTime);
         } catch {
@@ -80,14 +81,34 @@ export function PlaceDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placeId]);
 
+  // Check if place is already favorited - separate effect to handle auth loading
+  useEffect(() => {
+    if (!user || !placeId) return;
+
+    const checkFavorited = async () => {
+      try {
+        const favorited = await isPlaceFavorited(user.id, placeId);
+        setIsSaved(favorited);
+      } catch (err) {
+        console.error('Failed to check favorited status:', err);
+      }
+    };
+
+    checkFavorited();
+  }, [user, placeId]);
+
   useEffect(() => {
     let isMounted = true;
 
     const loadPhoto = async () => {
-      if (!place?.googlePlaceId) return;
-      const url = await getGooglePlacePhotoUrl(place.googlePlaceId, 1200);
-      if (isMounted) {
-        setPhotoUrl(url);
+      if (!place?.id || !place?.googlePlaceId) return;
+      try {
+        const url = await getGooglePlacePhotoUrlWithRefresh(place.id, place.googlePlaceId, 1200);
+        if (isMounted) {
+          setPhotoUrl(url);
+        }
+      } catch (err) {
+        console.error('Failed to load photo:', err);
       }
     };
 
@@ -95,7 +116,7 @@ export function PlaceDetail() {
     return () => {
       isMounted = false;
     };
-  }, [place?.googlePlaceId]);
+  }, [place?.id, place?.googlePlaceId]);
 
   const handleNavigate = async () => {
     if (!place || !user) return;
@@ -276,6 +297,7 @@ export function PlaceDetail() {
                     <line x1="12" y1="2" x2="12" y2="15" />
                   </svg>
                 </button>
+                <ProfileMenu placeId={placeId} />
               </div>
             </div>
 

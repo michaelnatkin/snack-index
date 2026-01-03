@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach, beforeEach, type Mock } from 'vitest';
-import { getGoogleMapsUrl, getGooglePlacePhotoUrl, getPlaceHours } from './googlePlaces';
+import { getGoogleMapsUrl, getGooglePlacePhotoUrl, getPlaceHours, isStaleGooglePlaceIdError, StaleGooglePlaceIdError } from './googlePlaces';
 
 // Mock the cache module
 vi.mock('./cache', () => ({
@@ -290,5 +290,51 @@ describe('getPlaceHours', () => {
 
     expect(hours.isOpen).toBe(true);
     expect(hours.closeTime).toBe('9 PM');
+  });
+});
+
+describe('isStaleGooglePlaceIdError', () => {
+  it('returns true for 404 errors with "place id is no longer valid"', () => {
+    const error = new Error('Place details failed: 404 Place ID is no longer valid {"error":{"status":"NOT_FOUND"}}');
+    expect(isStaleGooglePlaceIdError(error)).toBe(true);
+  });
+
+  it('returns true for 404 errors with NOT_FOUND status', () => {
+    const error = new Error('Place photos failed: 404 {"error":{"code":404,"status":"NOT_FOUND"}}');
+    expect(isStaleGooglePlaceIdError(error)).toBe(true);
+  });
+
+  it('returns false for non-404 errors', () => {
+    const error = new Error('Place details failed: 500 Internal Server Error');
+    expect(isStaleGooglePlaceIdError(error)).toBe(false);
+  });
+
+  it('returns false for 404 without stale place ID message', () => {
+    const error = new Error('Resource not found: 404');
+    expect(isStaleGooglePlaceIdError(error)).toBe(false);
+  });
+
+  it('returns false for non-Error values', () => {
+    expect(isStaleGooglePlaceIdError('some string')).toBe(false);
+    expect(isStaleGooglePlaceIdError(null)).toBe(false);
+    expect(isStaleGooglePlaceIdError(undefined)).toBe(false);
+    expect(isStaleGooglePlaceIdError(123)).toBe(false);
+  });
+});
+
+describe('StaleGooglePlaceIdError', () => {
+  it('creates error with correct properties', () => {
+    const originalError = new Error('API failed');
+    const error = new StaleGooglePlaceIdError('ChIJ123abc', originalError);
+
+    expect(error.name).toBe('StaleGooglePlaceIdError');
+    expect(error.googlePlaceId).toBe('ChIJ123abc');
+    expect(error.originalError).toBe(originalError);
+    expect(error.message).toContain('ChIJ123abc');
+  });
+
+  it('is instanceof Error', () => {
+    const error = new StaleGooglePlaceIdError('test', new Error('test'));
+    expect(error instanceof Error).toBe(true);
   });
 });

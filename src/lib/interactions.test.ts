@@ -1,10 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
-import { isMilestoneVisit, getCelebrationMessage } from './interactions';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { isMilestoneVisit, getCelebrationMessage, isPlaceFavorited } from './interactions';
+
+const mockGetDoc = vi.fn().mockResolvedValue({ exists: () => false });
 
 // Mock Firebase
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn(),
-  getDoc: vi.fn().mockResolvedValue({ exists: () => false }),
+  getDoc: (...args: unknown[]) => mockGetDoc(...args),
   setDoc: vi.fn(),
   updateDoc: vi.fn(),
   collection: vi.fn(),
@@ -100,6 +102,49 @@ describe('getCelebrationMessage', () => {
     expect(getCelebrationMessage(3)).toContain('3rd');
     expect(getCelebrationMessage(7)).toContain('7th');
     expect(getCelebrationMessage(42)).toContain('42nd');
+  });
+});
+
+describe('isPlaceFavorited', () => {
+  beforeEach(() => {
+    mockGetDoc.mockReset();
+  });
+
+  it('returns false when interaction document does not exist', async () => {
+    mockGetDoc.mockResolvedValueOnce({ exists: () => false });
+    
+    const result = await isPlaceFavorited('user-123', 'place-456');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when document exists but favorited is false', async () => {
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ favorited: false }),
+    });
+    
+    const result = await isPlaceFavorited('user-123', 'place-456');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when document exists but favorited is undefined', async () => {
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({}),
+    });
+    
+    const result = await isPlaceFavorited('user-123', 'place-456');
+    expect(result).toBe(false);
+  });
+
+  it('returns true when document exists and favorited is true', async () => {
+    mockGetDoc.mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ favorited: true }),
+    });
+    
+    const result = await isPlaceFavorited('user-123', 'place-456');
+    expect(result).toBe(true);
   });
 });
 

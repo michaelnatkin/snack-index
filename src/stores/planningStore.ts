@@ -1,19 +1,20 @@
 import { create } from 'zustand';
 
-export interface TestingOverrides {
+export interface PlanningOverrides {
   overrideLocation?: { latitude: number; longitude: number; label?: string };
   overrideTimeIso?: string;
 }
 
-interface TestingStore extends TestingOverrides {
+interface PlanningStore extends PlanningOverrides {
   setOverrideLocation: (location?: { latitude: number; longitude: number; label?: string }) => void;
   setOverrideTimeIso: (iso?: string) => void;
   clearOverrides: () => void;
+  hasOverrides: () => boolean;
 }
 
-const STORAGE_KEY = 'snack-testing-overrides';
+const STORAGE_KEY = 'snack-planning-overrides';
 
-function loadInitial(): TestingOverrides {
+function loadInitial(): PlanningOverrides {
   if (typeof localStorage === 'undefined') return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -28,7 +29,7 @@ function loadInitial(): TestingOverrides {
   }
 }
 
-function persist(state: TestingOverrides) {
+function persist(state: PlanningOverrides) {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -37,11 +38,11 @@ function persist(state: TestingOverrides) {
   }
 }
 
-export const useTestingStore = create<TestingStore>((set, get) => ({
+export const usePlanningStore = create<PlanningStore>((set, get) => ({
   ...loadInitial(),
 
   setOverrideLocation: (location) => {
-    const next: TestingOverrides = {
+    const next: PlanningOverrides = {
       overrideLocation: location,
       overrideTimeIso: get().overrideTimeIso,
     };
@@ -50,7 +51,7 @@ export const useTestingStore = create<TestingStore>((set, get) => ({
   },
 
   setOverrideTimeIso: (iso) => {
-    const next: TestingOverrides = {
+    const next: PlanningOverrides = {
       overrideLocation: get().overrideLocation,
       overrideTimeIso: iso,
     };
@@ -59,10 +60,16 @@ export const useTestingStore = create<TestingStore>((set, get) => ({
   },
 
   clearOverrides: () => {
-    const next: TestingOverrides = {};
+    const next: PlanningOverrides = {};
     persist(next);
     set(next);
   },
+
+  hasOverrides: () => {
+    const state = get();
+    return !!(state.overrideLocation || state.overrideTimeIso);
+  },
 }));
 
-export default useTestingStore;
+export default usePlanningStore;
+

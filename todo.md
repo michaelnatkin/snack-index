@@ -1,7 +1,14 @@
+
+* add more real places and edit them, ask for a focus on veg dishes - have to wait for my gemini to reset
+* make sure to skip duplicates in the researcher
+* how will we handle multiple locations for the same restaurant?
+* ~~let any user set location/time~~ ✅ Added "Plan Ahead" in profile menu
+* put an admin link directly on a place so I can edit it
+
 Family launch
 
 * favicon
-* add more real places and edit them, ask for a focus on veg dishes - have to wait for my gemini to reset
+
 * add a rating for places - in a pinch / tasty / worth a special trip
 * clean up navigation from settings
 
